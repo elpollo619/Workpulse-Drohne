@@ -23,6 +23,19 @@ consumo como el **DJI Mini 4 Pro**.
 | 🧊 Modelo 3D / nube de puntos | 🔜 Roadmap | Vía motor de procesamiento (NodeODM) — ver `server/` |
 | ⚙️ Procesar fotos → orto/DSM | 🔜 Esqueleto | Orquestación con OpenDroneMap (`server/`) |
 
+### 🇨🇭 Integración suiza (swisstopo / geo.admin.ch)
+
+Pensada para operar en **Berna y toda Suiza** con la infraestructura geodata
+oficial (open data, sin clave de API):
+
+| Función | Fuente oficial |
+|---|---|
+| Ortofoto aérea de **10 cm** como capa base | SWISSIMAGE (swisstopo) |
+| Mapa nacional como capa alternativa | Landeskarte (swisstopo) |
+| **Elevación automática** al marcar puntos (~0.5 m) | swissALTI3D vía api3.geo.admin.ch |
+| **Desnivel** (↗subida/↘bajada) en cada distancia | Servicio de perfil geo.admin.ch |
+| Coordenadas **LV95 (EPSG:2056)** en vivo, en listas y CSV | CH1903+ oficial |
+
 ## El flujo de trabajo
 
 ```

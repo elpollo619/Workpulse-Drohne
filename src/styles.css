@@ -201,3 +201,15 @@ button:hover { background: #26333d; }
 
 /* Ajustes de Leaflet en tema oscuro */
 .leaflet-container { background: #0b0f12; }
+
+/* Lectura de coordenadas LV95/WGS84 en vivo */
+.coords-readout {
+  background: rgba(23, 31, 38, 0.92);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

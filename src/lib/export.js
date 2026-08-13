@@ -1,5 +1,7 @@
-// Exportación de datos: GeoJSON (mediciones + puntos), CSV (puntos GPS) y
-// lista de GCP en el formato de OpenDroneMap.
+// Exportación de datos: GeoJSON (mediciones + puntos), CSV (puntos GPS, con
+// LV95 dentro de Suiza) y lista de GCP en el formato de OpenDroneMap.
+
+import { wgs84ToLV95, isInSwitzerland } from './swiss.js'
 
 function download(filename, text, mime = 'text/plain') {
   const blob = new Blob([text], { type: mime })
@@ -47,11 +49,17 @@ export function exportGeoJSON(project) {
   download(`${slug(project.name)}.geojson`, JSON.stringify(fc, null, 2), 'application/geo+json')
 }
 
-/** Exporta los puntos GPS como CSV. */
+/** Exporta los puntos GPS como CSV, con coordenadas LV95 para puntos en Suiza. */
 export function exportPointsCSV(project) {
-  const rows = [['label', 'lat', 'lng', 'elev_m', 'note']]
+  const rows = [['label', 'lat', 'lng', 'lv95_e', 'lv95_n', 'elev_m', 'note']]
   for (const p of project.points) {
-    rows.push([p.label ?? '', p.lat, p.lng, p.elev ?? '', (p.note ?? '').replace(/[\n,]/g, ' ')])
+    let e = '', n = ''
+    if (isInSwitzerland(p.lng, p.lat)) {
+      const lv95 = wgs84ToLV95(p.lng, p.lat)
+      e = lv95.e.toFixed(2)
+      n = lv95.n.toFixed(2)
+    }
+    rows.push([p.label ?? '', p.lat, p.lng, e, n, p.elev ?? '', (p.note ?? '').replace(/[\n,]/g, ' ')])
   }
   const csv = rows.map((r) => r.join(',')).join('\n')
   download(`${slug(project.name)}-puntos.csv`, csv, 'text/csv')

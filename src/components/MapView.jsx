@@ -6,6 +6,7 @@ import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
 import { loadGeoRaster, computeVolume } from '../lib/raster.js'
 import { lineLengthMeters, polygonMetrics } from '../lib/measure.js'
+import { SWISS_LAYERS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
 // Arregla las rutas de los iconos por defecto de Leaflet bajo Vite.
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -36,14 +37,55 @@ const MapView = forwardRef(function MapView(
 
   // Inicialización única del mapa.
   useEffect(() => {
-    const map = L.map(containerRef.current, { center: [46.8, 8.2], zoom: 8 })
+    const map = L.map(containerRef.current, { center: BERN_CENTER, zoom: 14 })
     mapRef.current = map
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Capas base: ortofoto oficial suiza (SWISSIMAGE) por defecto — ideal para
+    // Berna/Suiza —, mapa nacional swisstopo y OpenStreetMap como alternativas.
+    const swissimage = L.tileLayer(SWISS_LAYERS.swissimage.url, {
+      maxZoom: 22,
+      maxNativeZoom: SWISS_LAYERS.swissimage.maxNativeZoom,
+      attribution: SWISS_LAYERS.swissimage.attribution,
+    }).addTo(map)
+    const pixelkarte = L.tileLayer(SWISS_LAYERS.pixelkarte.url, {
+      maxZoom: 22,
+      maxNativeZoom: SWISS_LAYERS.pixelkarte.maxNativeZoom,
+      attribution: SWISS_LAYERS.pixelkarte.attribution,
+    })
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 22,
       maxNativeZoom: 19,
       attribution: '© OpenStreetMap',
-    }).addTo(map)
+    })
+    L.control.layers(
+      {
+        [SWISS_LAYERS.swissimage.name]: swissimage,
+        [SWISS_LAYERS.pixelkarte.name]: pixelkarte,
+        OpenStreetMap: osm,
+      },
+      {},
+      { position: 'topright' }
+    ).addTo(map)
+
+    // Lectura de coordenadas en vivo: LV95 (oficial suizo) + WGS84.
+    const coordsCtl = L.control({ position: 'bottomright' })
+    coordsCtl.onAdd = () => {
+      const div = L.DomUtil.create('div', 'coords-readout')
+      div.textContent = '—'
+      return div
+    }
+    coordsCtl.addTo(map)
+    map.on('mousemove', (e) => {
+      const { lng, lat } = e.latlng
+      const el = document.querySelector('.coords-readout')
+      if (!el) return
+      if (isInSwitzerland(lng, lat)) {
+        const { e: east, n: north } = wgs84ToLV95(lng, lat)
+        el.textContent = `LV95 ${east.toFixed(1)} / ${north.toFixed(1)} · ${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      } else {
+        el.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      }
+    })
 
     // Controles de dibujo de Geoman (los activamos programáticamente por herramienta).
     map.pm.setGlobalOptions({ snappable: true, snapDistance: 15 })

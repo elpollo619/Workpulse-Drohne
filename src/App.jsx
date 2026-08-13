@@ -3,6 +3,7 @@ import MapView from './components/MapView.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP } from './lib/export.js'
 import { fmtDistance, fmtArea, fmtVolume } from './lib/measure.js'
+import { fetchSwissHeight, fetchSwissProfile, wgs84ToLV95, isInSwitzerland } from './lib/swiss.js'
 
 const TOOLS = [
   { id: 'pan', label: '✋ Mover', hint: 'Navegar por el mapa' },
@@ -43,7 +44,23 @@ export default function App() {
   }
 
   // --- Callbacks del mapa ---
-  function handleMeasurement({ type, coords, result }) {
+  async function handleMeasurement({ type, coords, result }) {
+    // Para distancias dentro de Suiza, se enriquece con el perfil de elevación
+    // oficial (swissALTI3D): desnivel acumulado de subida y bajada.
+    if (type === 'distance' && coords.every(([lng, lat]) => isInSwitzerland(lng, lat))) {
+      setStatus('Consultando perfil de elevación oficial…')
+      const profile = await fetchSwissProfile(coords)
+      if (profile?.length) {
+        let gain = 0, loss = 0
+        for (let i = 1; i < profile.length; i++) {
+          const dz = (profile[i].alt ?? 0) - (profile[i - 1].alt ?? 0)
+          if (dz > 0) gain += dz
+          else loss -= dz
+        }
+        result = { ...result, elevGainM: gain, elevLossM: loss }
+      }
+      setStatus(null)
+    }
     updateCurrent((p) => {
       p.measurements = [
         ...p.measurements,
@@ -63,11 +80,22 @@ export default function App() {
     })
   }
 
-  function handlePoint({ lng, lat }) {
+  async function handlePoint({ lng, lat }) {
     const label = prompt('Nombre del punto:', `P${(current.points?.length ?? 0) + 1}`)
     if (label === null) return
-    const elevStr = prompt('Elevación (m, opcional):', '')
-    const elev = elevStr ? parseFloat(elevStr) : null
+
+    // Dentro de Suiza, la elevación se obtiene automáticamente del servicio
+    // oficial swissALTI3D (~0.5 m); fuera, se pide a mano.
+    let elev = null
+    if (isInSwitzerland(lng, lat)) {
+      setStatus('Consultando elevación oficial (swissALTI3D)…')
+      elev = await fetchSwissHeight(lng, lat)
+      setStatus(elev != null ? `Elevación oficial: ${elev.toFixed(2)} m s.n.m.` : null)
+    } else {
+      const elevStr = prompt('Elevación (m, opcional):', '')
+      elev = elevStr ? parseFloat(elevStr) : null
+    }
+
     const point = { id: crypto.randomUUID(), label, lng, lat, elev, note: '' }
     updateCurrent((p) => {
       p.points = [...p.points, point]
@@ -207,7 +235,11 @@ export default function App() {
             {current.measurements.map((m) => (
               <li key={m.id}>
                 <span className="mrow">
-                  {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}`}
+                  {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}${
+                    m.result.elevGainM != null
+                      ? ` · ↗${m.result.elevGainM.toFixed(0)}m ↘${m.result.elevLossM.toFixed(0)}m`
+                      : ''
+                  }`}
                   {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
                   {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.volumeM3)}`}
                 </span>
@@ -221,11 +253,19 @@ export default function App() {
 
           <label className="block-label">Puntos GPS ({current.points.length})</label>
           <ul className="list">
-            {current.points.map((p) => (
-              <li key={p.id}>
-                <span className="mrow">📍 {p.label} — {p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
-              </li>
-            ))}
+            {current.points.map((p) => {
+              const lv95 = isInSwitzerland(p.lng, p.lat) ? wgs84ToLV95(p.lng, p.lat) : null
+              return (
+                <li key={p.id}>
+                  <span className="mrow" title={`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`}>
+                    📍 {p.label} — {lv95
+                      ? `LV95 ${lv95.e.toFixed(1)}/${lv95.n.toFixed(1)}`
+                      : `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}
+                    {p.elev != null && ` · ${p.elev.toFixed(1)} m`}
+                  </span>
+                </li>
+              )
+            })}
             {current.points.length === 0 && <li className="muted">Sin puntos todavía.</li>}
           </ul>
 
