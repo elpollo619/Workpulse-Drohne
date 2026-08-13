@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Server
+server/node_modules/
+server/uploads/
+server/data/
+
+# Datos de vuelo / procesamiento (pesados, no versionar)
+*.tif
+*.tiff
+*.las
+*.laz
+*.obj
+*.ply
+data/
+flights/
