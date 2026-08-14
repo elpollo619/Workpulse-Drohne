@@ -485,6 +485,12 @@ button:hover { background: #26333d; }
   font-size: 12px;
 }
 .pano360-top label { display: flex; align-items: center; gap: 6px; }
+.pano360-modes { display: flex; gap: 4px; }
+.pano360-modes button.active {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
 .pano360-top input {
   width: 58px;
   background: var(--panel-2);
