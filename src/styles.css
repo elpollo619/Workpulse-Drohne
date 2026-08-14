@@ -185,6 +185,37 @@ button:hover { background: #26333d; }
   position: absolute;
   inset: 0;
 }
+/* Barra flotante de dibujo (deshacer punto / terminar / reiniciar) */
+.draw-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 1100;
+  background: rgba(23, 31, 38, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+.draw-toolbar button {
+  font-size: 12px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .draw-toolbar {
+    top: auto;
+    bottom: 60px;
+    width: max-content;
+    max-width: calc(100% - 20px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
 .status {
   position: absolute;
   bottom: 16px;

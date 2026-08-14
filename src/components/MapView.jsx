@@ -234,6 +234,38 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     flyTo(lat, lng, zoom = 17) {
       mapRef.current?.flyTo([lat, lng], zoom)
     },
+    /** Deshace el último vértice del dibujo en curso. */
+    undoVertex() {
+      const map = mapRef.current
+      if (!map) return
+      for (const shape of ['Polygon', 'Line']) {
+        const draw = map.pm.Draw?.[shape]
+        if (draw?._enabled) {
+          try { draw._removeLastVertex() } catch { /* sin vértices aún */ }
+          return
+        }
+      }
+    },
+    /** Cancela el dibujo en curso y lo reinicia desde cero. */
+    cancelDraw(tool) {
+      const map = mapRef.current
+      if (!map) return
+      map.pm.disableDraw()
+      if (tool === 'distance') map.pm.enableDraw('Line')
+      else if (tool === 'area' || tool === 'volume' || tool === 'plan') map.pm.enableDraw('Polygon')
+    },
+    /** Termina el dibujo en curso con los vértices ya puestos. */
+    finishDraw() {
+      const map = mapRef.current
+      if (!map) return
+      for (const shape of ['Polygon', 'Line']) {
+        const draw = map.pm.Draw?.[shape]
+        if (draw?._enabled) {
+          try { draw._finishShape() } catch { /* faltan vértices */ }
+          return
+        }
+      }
+    },
     /** Dibuja la serpentina del plan de vuelo con sus puntos de foto. */
     drawFlightPlan(ring, waypoints) {
       const group = planLayerRef.current
