@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
+import ProfileChart from './components/ProfileChart.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
-import { exportGeoJSON, exportPointsCSV, exportGCP } from './lib/export.js'
+import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
+import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
 import { computeVolume } from './lib/raster.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid,
-  wgs84ToLV95, isInSwitzerland,
+  searchSwissLocations, wgs84ToLV95, isInSwitzerland,
 } from './lib/swiss.js'
 
 const TOOLS = [
@@ -34,7 +36,28 @@ export default function App() {
   const [status, setStatus] = useState(null)
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
   const mapRef = useRef(null)
+  const searchTimer = useRef(null)
+
+  // Buscador de direcciones/lugares suizos (geo.admin.ch), con debounce.
+  function onQueryChange(text) {
+    setQuery(text)
+    clearTimeout(searchTimer.current)
+    if (!text.trim()) return setResults([])
+    searchTimer.current = setTimeout(async () => {
+      setResults(await searchSwissLocations(text))
+    }, 300)
+  }
+
+  function goToResult(r) {
+    setResults([])
+    setQuery(r.label)
+    mapRef.current?.flyTo(r.lat, r.lng)
+    if (window.innerWidth < 768) setSidebarOpen(false)
+  }
 
   // Garantiza que exista al menos un proyecto.
   useEffect(() => {
@@ -86,7 +109,11 @@ export default function App() {
             if (dz > 0) gain += dz
             else loss -= dz
           }
-          result = { ...result, elevGainM: gain, elevLossM: loss }
+          // Perfil decimado (~60 puntos) para el mini-gráfico, sin inflar
+          // el almacenamiento local.
+          const step = Math.max(1, Math.floor(profile.length / 60))
+          const decimated = profile.filter((_, i) => i % step === 0 || i === profile.length - 1)
+          result = { ...result, elevGainM: gain, elevLossM: loss, profile: decimated }
         }
         setStatus(null)
       }
@@ -209,11 +236,34 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <button
+        className="sidebar-toggle"
+        title={sidebarOpen ? 'Ocultar panel' : 'Mostrar panel'}
+        onClick={() => setSidebarOpen((v) => !v)}
+      >
+        {sidebarOpen ? '✕' : '☰'}
+      </button>
+      <aside className={sidebarOpen ? 'sidebar' : 'sidebar hidden'}>
         <header className="brand">
           <h1>Workpulse<span>Drohne</span></h1>
           <p>Medición fotogramétrica · Berna 🇨🇭</p>
         </header>
+
+        <section className="block search-block">
+          <input
+            type="text"
+            placeholder="🔍 Buscar dirección o lugar en Suiza…"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+          />
+          {results.length > 0 && (
+            <ul className="search-results">
+              {results.map((r, i) => (
+                <li key={i} onClick={() => goToResult(r)}>{r.label}</li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <section className="block">
           <label className="block-label">Proyecto</label>
@@ -301,18 +351,23 @@ export default function App() {
               <label className="block-label">Mediciones ({current.measurements.length})</label>
               <ul className="list">
                 {current.measurements.map((m) => (
-                  <li key={m.id}>
-                    <span className="mrow">
-                      {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}${
-                        m.result.elevGainM != null
-                          ? ` · ↗${m.result.elevGainM.toFixed(0)}m ↘${m.result.elevLossM.toFixed(0)}m`
-                          : ''
-                      }`}
-                      {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
-                      {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.fillM3)}${
-                        m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
-                      }`}
-                    </span>
+                  <li key={m.id} className={m.type === 'distance' && m.result.profile ? 'with-chart' : ''}>
+                    <div className="mitem">
+                      <span className="mrow">
+                        {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}${
+                          m.result.elevGainM != null
+                            ? ` · ↗${m.result.elevGainM.toFixed(0)}m ↘${m.result.elevLossM.toFixed(0)}m`
+                            : ''
+                        }`}
+                        {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
+                        {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.fillM3)}${
+                          m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
+                        }`}
+                      </span>
+                      {m.type === 'distance' && m.result.profile && (
+                        <ProfileChart profile={m.result.profile} />
+                      )}
+                    </div>
                     <button className="del" onClick={() => deleteMeasurement(m.id)}>✕</button>
                   </li>
                 ))}
@@ -360,8 +415,13 @@ export default function App() {
               <label className="block-label">Exportar</label>
               <div className="tools">
                 <button onClick={() => exportGeoJSON(current)}>GeoJSON</button>
+                <button onClick={() => exportGPX(current)}>GPX</button>
+                <button onClick={() => exportKML(current)}>KML</button>
                 <button onClick={() => exportPointsCSV(current)}>CSV puntos</button>
                 <button onClick={() => exportGCP(current)}>Lista GCP</button>
+                <button onClick={() => openPrintableReport(current) || setStatus('El navegador bloqueó la ventana del informe.')}>
+                  🖨️ Informe
+                </button>
               </div>
             </section>
           </>

@@ -6,7 +6,7 @@ import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
 import { loadGeoRaster } from '../lib/raster.js'
 import { fmtDistance, fmtArea, fmtVolume } from '../lib/measure.js'
-import { SWISS_LAYERS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
+import { SWISS_LAYERS, SWISS_OVERLAYS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
 // Arregla las rutas de los iconos por defecto de Leaflet bajo Vite.
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -61,15 +61,62 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       maxNativeZoom: 19,
       attribution: '© OpenStreetMap',
     })
+    // Overlays oficiales opcionales: catastro (parcelas) y sombreado de relieve.
+    const overlays = {}
+    for (const key of Object.keys(SWISS_OVERLAYS)) {
+      const o = SWISS_OVERLAYS[key]
+      overlays[o.name] = L.tileLayer(o.url, {
+        maxZoom: 22,
+        maxNativeZoom: o.maxNativeZoom,
+        attribution: o.attribution,
+        opacity: o.opacity,
+      })
+    }
+
     L.control.layers(
       {
         [SWISS_LAYERS.swissimage.name]: swissimage,
         [SWISS_LAYERS.pixelkarte.name]: pixelkarte,
         OpenStreetMap: osm,
       },
-      {},
+      overlays,
       { position: 'topright' }
     ).addTo(map)
+
+    // Botón de geolocalización: centra el mapa en la posición GPS del
+    // dispositivo (útil en campo, junto al drone).
+    const locateCtl = L.control({ position: 'topleft' })
+    let locateMarker = null
+    locateCtl.onAdd = () => {
+      const btn = L.DomUtil.create('a', 'locate-btn leaflet-bar')
+      btn.href = '#'
+      btn.title = 'Mi ubicación (GPS)'
+      btn.textContent = '🎯'
+      L.DomEvent.on(btn, 'click', (ev) => {
+        L.DomEvent.preventDefault(ev)
+        if (!navigator.geolocation) {
+          onStatus?.('Este dispositivo no ofrece geolocalización.')
+          return
+        }
+        onStatus?.('Obteniendo tu posición GPS…')
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, accuracy } = pos.coords
+            if (locateMarker) map.removeLayer(locateMarker)
+            locateMarker = L.layerGroup([
+              L.circle([latitude, longitude], { radius: accuracy, weight: 1, color: '#34d399', fillOpacity: 0.1 }),
+              L.circleMarker([latitude, longitude], { radius: 6, color: '#fff', weight: 2, fillColor: '#34d399', fillOpacity: 1 }),
+            ]).addTo(map)
+            map.flyTo([latitude, longitude], Math.max(map.getZoom(), 17))
+            onStatus?.(`Posición encontrada (±${Math.round(accuracy)} m)`)
+          },
+          (err) => onStatus?.(`No se pudo obtener la posición: ${err.message}`),
+          { enableHighAccuracy: true, timeout: 12000 }
+        )
+      })
+      return btn
+    }
+    locateCtl.addTo(map)
 
     projectLayerRef.current = L.featureGroup().addTo(map)
 
@@ -181,6 +228,9 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     fitToOrtho() {
       if (orthoRef.current) mapRef.current.fitBounds(orthoRef.current.getBounds())
+    },
+    flyTo(lat, lng, zoom = 17) {
+      mapRef.current?.flyTo([lat, lng], zoom)
     },
     setOrthoOpacity(v) {
       if (orthoRef.current) orthoRef.current.setOpacity(v)
