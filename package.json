@@ -1,0 +1,26 @@
+{
+  "name": "workpulse-drohne",
+  "version": "0.1.0",
+  "description": "Plataforma web de fotogrametria y medicion para drones DJI (Mini 4 Pro y similares)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.17.0",
+    "@turf/turf": "^7.1.0",
+    "georaster": "^1.6.0",
+    "georaster-layer-for-leaflet": "^3.10.0",
+    "leaflet": "^1.9.4",
+    "proj4": "^2.12.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}

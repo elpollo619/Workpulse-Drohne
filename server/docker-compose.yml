@@ -1,0 +1,17 @@
+# Motor de procesamiento fotogramétrico: NodeODM (OpenDroneMap).
+# Levanta el motor con:  docker compose up -d
+# La API de NodeODM queda en http://localhost:3000
+#
+# El servidor de orquestación (index.js) le envía las fotos y descarga los
+# productos (ortomosaico, DSM, nube de puntos).
+
+services:
+  nodeodm:
+    image: opendronemap/nodeodm:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/nodeodm:/var/www/data
+    restart: unless-stopped
+    # Para máquinas con poca RAM, limita tareas concurrentes:
+    # command: ["--max_concurrency", "1"]
