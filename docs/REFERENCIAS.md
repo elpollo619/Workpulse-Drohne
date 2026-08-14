@@ -67,6 +67,20 @@ toma como referencia — con su licencia, porque condiciona *cómo* se pueden us
 > **swipos** (GNSS RTK de swisstopo) o derivarse de puntos fijos de la
 > mensuración oficial (AV/MO), en LV95.
 
+## Cámaras 360° (Insta360 y similares)
+
+| Recurso | ★ | Licencia | Uso |
+|---|---|---|---|
+| Visor 360 propio (Three.js) | — | — | ✅ **Integrado**: visor equirectangular con medición de suelo por trigonometría (altura de cámara conocida) |
+| [mpetroff/pannellum](https://github.com/mpetroff/pannellum) | 4.9k | MIT | Visor panorámico de referencia (sin medición) |
+| [Photo Sphere Viewer](https://github.com/JeremyHeleine/Photo-Sphere-Viewer) | 888 | MIT | Alternativa de visor con plugins |
+| [Insta360-Research-Team/DAP](https://github.com/Insta360-Research-Team/DAP) | 358 | — | **Depth Any Panoramas**: IA que estima profundidad de una foto 360 — candidato futuro para medición sin altura conocida |
+| OpenSfM/ODM cámara esférica | — | AGPL (motor externo) | Varias fotos 360 → nube de puntos 3D completa (`--camera-lens spherical` en ODM) |
+
+> **Flujo 3D completo con Insta360:** exporta fotogramas equirectangulares
+> (cada 1–2 m caminando), procésalos en la pestaña ⚙️ con la opción de cámara
+> esférica de ODM, y mide sobre el resultado como con las fotos del drone.
+
 ## Planificación de vuelo
 
 | Repo | ★ | Uso |

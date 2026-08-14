@@ -400,6 +400,62 @@ button:hover { background: #26333d; }
   .sidebar { padding-top: 54px; }
 }
 
+/* ---------- Visor 360° con medición ---------- */
+.pano360 {
+  position: absolute;
+  inset: 0;
+  z-index: 1300;
+  background: #000;
+}
+.pano360-canvas { position: absolute; inset: 0; }
+.pano360-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(23, 31, 38, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.pano360-top label { display: flex; align-items: center; gap: 6px; }
+.pano360-top input {
+  width: 58px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 6px;
+}
+.pano360-msg {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(23, 31, 38, 0.95);
+  border: 1px solid var(--accent-2);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  max-width: calc(100% - 24px);
+  text-align: center;
+}
+.pano360-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* Lectura de coordenadas LV95/WGS84 en vivo */
 .coords-readout {
   background: rgba(23, 31, 38, 0.92);
