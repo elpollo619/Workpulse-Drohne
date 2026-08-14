@@ -6,7 +6,11 @@
 //   https://api3.geo.admin.ch/services/sdiservices.html
 //   https://www.swisstopo.admin.ch/en/geodata
 
-import proj4 from 'proj4'
+import proj4module from 'proj4'
+
+// Interop CJS/ESM: en el build de producción el import puede llegar envuelto
+// como { default: fn }; sin este guard, proj4.defs no existe y la app no arranca.
+const proj4 = proj4module.default ?? proj4module
 
 // CH1903+ / LV95 (EPSG:2056) — el sistema de referencia oficial suizo.
 export const EPSG_2056 =
