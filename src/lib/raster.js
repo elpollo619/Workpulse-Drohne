@@ -6,7 +6,10 @@
 // se calcule correctamente en metros cúbicos reales.
 
 import parseGeoraster from 'georaster'
-import proj4 from 'proj4'
+import proj4module from 'proj4'
+
+// Interop CJS/ESM (ver nota en swiss.js).
+const proj4 = proj4module.default ?? proj4module
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { polygon as turfPolygon, point as turfPoint } from '@turf/helpers'
 
