@@ -45,5 +45,14 @@ export default defineConfig({
     // ("proj4.defs is not a function" al arrancar). Vite agrupa correctamente
     // por sí solo.
     chunkSizeWarningLimit: 2000,
+    // Dos apps independientes desde el mismo repo:
+    //   /      -> Workpulse Drohne (drone/terreno)
+    //   /360/  -> Workpulse 360 (cámara 360°)
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        app360: fileURLToPath(new URL('./360/index.html', import.meta.url)),
+      },
+    },
   },
 })
