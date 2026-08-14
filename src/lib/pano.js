@@ -30,6 +30,30 @@ export function floorDistance(p1, p2) {
 }
 
 /**
+ * Perímetro (abierto) de una cadena de puntos del suelo.
+ */
+export function floorPathLength(points) {
+  let total = 0
+  for (let i = 1; i < points.length; i++) total += floorDistance(points[i - 1], points[i])
+  return total
+}
+
+/**
+ * Área real del polígono formado por puntos del suelo (fórmula del cordón,
+ * sobre el plano x-z).
+ */
+export function floorPolygonArea(points) {
+  if (points.length < 3) return 0
+  let s = 0
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    s += a.x * b.z - b.x * a.z
+  }
+  return Math.abs(s) / 2
+}
+
+/**
  * Altura de un objeto: rayo al pie (en el suelo) y rayo a la parte superior
  * en la misma vertical. h = altura de cámara, `dirTop.y` puede ser + o −.
  * @returns {number|null}
