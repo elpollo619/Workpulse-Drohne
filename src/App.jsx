@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView.jsx'
+import ProcessPanel from './components/ProcessPanel.jsx'
+import Dsm3DView from './components/Dsm3DView.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP } from './lib/export.js'
-import { fmtDistance, fmtArea, fmtVolume } from './lib/measure.js'
-import { fetchSwissHeight, fetchSwissProfile, wgs84ToLV95, isInSwitzerland } from './lib/swiss.js'
+import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
+import { computeVolume } from './lib/raster.js'
+import {
+  fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid,
+  wgs84ToLV95, isInSwitzerland,
+} from './lib/swiss.js'
 
 const TOOLS = [
   { id: 'pan', label: '✋ Mover', hint: 'Navegar por el mapa' },
@@ -13,18 +19,27 @@ const TOOLS = [
   { id: 'point', label: '📍 Punto GPS', hint: 'Clic para registrar coordenadas' },
 ]
 
+const BASE_MODES = [
+  { id: 'min', label: 'Cota mínima' },
+  { id: 'mean', label: 'Cota media' },
+  { id: 'perimeter', label: 'Perímetro (interpolado)' },
+  { id: 'swiss', label: '🇨🇭 Terreno oficial swissALTI3D' },
+]
+
 export default function App() {
   const [projects, setProjects] = useState(() => loadProjects())
   const [currentId, setCurrentId] = useState(() => loadProjects()[0]?.id ?? null)
   const [tool, setTool] = useState('pan')
   const [baseMode, setBaseMode] = useState('min')
   const [status, setStatus] = useState(null)
+  const [tab, setTab] = useState('measure') // 'measure' | 'process'
+  const [show3D, setShow3D] = useState(false)
   const mapRef = useRef(null)
 
   // Garantiza que exista al menos un proyecto.
   useEffect(() => {
     if (projects.length === 0) {
-      const p = newProject('Vuelo de ejemplo')
+      const p = newProject('Vuelo Berna')
       setProjects([p])
       setCurrentId(p.id)
     }
@@ -37,50 +52,80 @@ export default function App() {
     [projects, currentId]
   )
 
+  // El mapa refleja siempre el estado guardado del proyecto (recargas,
+  // cambios de proyecto, borrados).
+  useEffect(() => {
+    if (current) mapRef.current?.syncProject(current)
+  }, [current])
+
   function updateCurrent(mutator) {
     setProjects((prev) =>
       prev.map((p) => (p.id === current.id ? mutator({ ...p }) : p))
     )
   }
 
-  // --- Callbacks del mapa ---
-  async function handleMeasurement({ type, coords, result }) {
-    // Para distancias dentro de Suiza, se enriquece con el perfil de elevación
-    // oficial (swissALTI3D): desnivel acumulado de subida y bajada.
-    if (type === 'distance' && coords.every(([lng, lat]) => isInSwitzerland(lng, lat))) {
-      setStatus('Consultando perfil de elevación oficial…')
-      const profile = await fetchSwissProfile(coords)
-      if (profile?.length) {
-        let gain = 0, loss = 0
-        for (let i = 1; i < profile.length; i++) {
-          const dz = (profile[i].alt ?? 0) - (profile[i - 1].alt ?? 0)
-          if (dz > 0) gain += dz
-          else loss -= dz
+  function addMeasurement(type, coords, result) {
+    updateCurrent((p) => {
+      p.measurements = [...p.measurements, { id: crypto.randomUUID(), type, coords, result }]
+      return p
+    })
+  }
+
+  // --- Flujo de dibujo: el mapa entrega la geometría cruda y aquí se procesa ---
+  async function handleDraw({ tool: drawTool, coords }) {
+    if (drawTool === 'distance') {
+      let result = { lengthM: lineLengthMeters(coords) }
+      // Dentro de Suiza, se enriquece con el desnivel oficial (swissALTI3D).
+      if (coords.every(([lng, lat]) => isInSwitzerland(lng, lat))) {
+        setStatus('Consultando perfil de elevación oficial…')
+        const profile = await fetchSwissProfile(coords)
+        if (profile?.length) {
+          let gain = 0, loss = 0
+          for (let i = 1; i < profile.length; i++) {
+            const dz = (profile[i].alt ?? 0) - (profile[i - 1].alt ?? 0)
+            if (dz > 0) gain += dz
+            else loss -= dz
+          }
+          result = { ...result, elevGainM: gain, elevLossM: loss }
         }
-        result = { ...result, elevGainM: gain, elevLossM: loss }
+        setStatus(null)
       }
-      setStatus(null)
+      addMeasurement('distance', coords, result)
+    } else if (drawTool === 'area') {
+      addMeasurement('area', coords, polygonMetrics(coords))
+    } else if (drawTool === 'volume') {
+      await handleVolume(coords)
+    } else if (drawTool === 'point') {
+      await handlePoint(coords)
     }
-    updateCurrent((p) => {
-      p.measurements = [
-        ...p.measurements,
-        { id: crypto.randomUUID(), type, coords, result },
-      ]
-      return p
-    })
   }
 
-  function handleVolume({ ring, result }) {
-    updateCurrent((p) => {
-      p.measurements = [
-        ...p.measurements,
-        { id: crypto.randomUUID(), type: 'volume', coords: ring, result },
-      ]
-      return p
-    })
+  async function handleVolume(ring) {
+    const dsm = mapRef.current?.getDSM()
+    if (!dsm) {
+      setStatus('⚠️ Carga primero un DSM (pestaña Procesar o archivo GeoTIFF) para medir volumen.')
+      return
+    }
+    let opts = { baseMode }
+    if (baseMode === 'swiss') {
+      // Terreno oficial como superficie base: volumen = DSM − swissALTI3D.
+      setStatus('Muestreando terreno oficial swissALTI3D…')
+      const samples = await fetchSwissHeightGrid(ring)
+      if (!samples) {
+        setStatus('⚠️ swissALTI3D no disponible aquí (¿fuera de Suiza?). Usando cota mínima.')
+        opts = { baseMode: 'min' }
+      } else {
+        opts = { baseMode: 'grid', baseSamples: samples }
+      }
+    }
+    setStatus('Calculando volumen…')
+    const result = computeVolume(dsm, ring, opts)
+    result.baseModeUsed = opts.baseMode === 'grid' ? 'swissALTI3D' : opts.baseMode
+    addMeasurement('volume', ring, result)
+    setStatus(null)
   }
 
-  async function handlePoint({ lng, lat }) {
+  async function handlePoint([lng, lat]) {
     const label = prompt('Nombre del punto:', `P${(current.points?.length ?? 0) + 1}`)
     if (label === null) return
 
@@ -96,21 +141,18 @@ export default function App() {
       elev = elevStr ? parseFloat(elevStr) : null
     }
 
-    const point = { id: crypto.randomUUID(), label, lng, lat, elev, note: '' }
     updateCurrent((p) => {
-      p.points = [...p.points, point]
+      p.points = [...p.points, { id: crypto.randomUUID(), label, lng, lat, elev, note: '' }]
       return p
     })
-    mapRef.current?.addPointMarker(point)
   }
 
-  // --- Carga de archivos ---
+  // --- Carga de archivos GeoTIFF a mano ---
   async function onOrthoFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const buf = await file.arrayBuffer()
     try {
-      await mapRef.current.loadOrtho(buf)
+      await mapRef.current.loadOrtho(await file.arrayBuffer())
     } catch (err) {
       setStatus('Error al cargar el ortomosaico: ' + err.message)
     }
@@ -120,9 +162,8 @@ export default function App() {
   async function onDSMFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const buf = await file.arrayBuffer()
     try {
-      await mapRef.current.loadDSM(buf)
+      await mapRef.current.loadDSM(await file.arrayBuffer())
     } catch (err) {
       setStatus('Error al cargar el DSM: ' + err.message)
     }
@@ -149,6 +190,13 @@ export default function App() {
     })
   }
 
+  function deletePoint(id) {
+    updateCurrent((p) => {
+      p.points = p.points.filter((pt) => pt.id !== id)
+      return p
+    })
+  }
+
   function createProject() {
     const name = prompt('Nombre del proyecto:', `Vuelo ${projects.length + 1}`)
     if (!name) return
@@ -164,16 +212,13 @@ export default function App() {
       <aside className="sidebar">
         <header className="brand">
           <h1>Workpulse<span>Drohne</span></h1>
-          <p>Medición fotogramétrica</p>
+          <p>Medición fotogramétrica · Berna 🇨🇭</p>
         </header>
 
         <section className="block">
           <label className="block-label">Proyecto</label>
           <div className="row">
-            <select
-              value={current.id}
-              onChange={(e) => setCurrentId(e.target.value)}
-            >
+            <select value={current.id} onChange={(e) => setCurrentId(e.target.value)}>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -182,128 +227,153 @@ export default function App() {
           </div>
         </section>
 
-        <section className="block">
-          <label className="block-label">Datos del vuelo</label>
-          <label className="filebtn">
-            🗺️ Cargar ortomosaico (GeoTIFF)
-            <input type="file" accept=".tif,.tiff" onChange={onOrthoFile} hidden />
-          </label>
-          <label className="filebtn">
-            ⛰️ Cargar DSM (GeoTIFF)
-            <input type="file" accept=".tif,.tiff" onChange={onDSMFile} hidden />
-          </label>
-          <div className="row small">
-            <span>Opacidad orto</span>
-            <input
-              type="range" min="0" max="1" step="0.05" defaultValue="1"
-              onChange={(e) => mapRef.current?.setOrthoOpacity(parseFloat(e.target.value))}
+        <nav className="tabs">
+          <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>📐 Medir</button>
+          <button className={tab === 'process' ? 'active' : ''} onClick={() => setTab('process')}>⚙️ Procesar</button>
+        </nav>
+
+        {tab === 'process' && (
+          <section className="block">
+            <label className="block-label">Fotos del vuelo → orto + DSM</label>
+            <ProcessPanel
+              projectName={current.name}
+              onLoadOrtho={(buf) => mapRef.current.loadOrtho(buf)}
+              onLoadDSM={(buf) => mapRef.current.loadDSM(buf)}
+              onStatus={setStatus}
             />
-          </div>
-        </section>
-
-        <section className="block">
-          <label className="block-label">Herramienta</label>
-          <div className="tools">
-            {TOOLS.map((t) => (
-              <button
-                key={t.id}
-                className={tool === t.id ? 'tool active' : 'tool'}
-                title={t.hint}
-                onClick={() => setTool(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          {tool === 'volume' && (
+            <label className="block-label">O carga GeoTIFF a mano</label>
+            <label className="filebtn">
+              🗺️ Ortomosaico (GeoTIFF)
+              <input type="file" accept=".tif,.tiff" onChange={onOrthoFile} hidden />
+            </label>
+            <label className="filebtn">
+              ⛰️ DSM (GeoTIFF)
+              <input type="file" accept=".tif,.tiff" onChange={onDSMFile} hidden />
+            </label>
             <div className="row small">
-              <span>Plano base</span>
-              <select value={baseMode} onChange={(e) => setBaseMode(e.target.value)}>
-                <option value="min">Cota mínima</option>
-                <option value="mean">Cota media</option>
-              </select>
+              <span>Opacidad orto</span>
+              <input
+                type="range" min="0" max="1" step="0.05" defaultValue="1"
+                onChange={(e) => mapRef.current?.setOrthoOpacity(parseFloat(e.target.value))}
+              />
             </div>
-          )}
-          <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
-        </section>
+            <button
+              onClick={() => {
+                if (mapRef.current?.getDSM()) setShow3D(true)
+                else setStatus('⚠️ Carga primero un DSM para ver el terreno en 3D.')
+              }}
+            >
+              🧊 Vista 3D del terreno
+            </button>
+          </section>
+        )}
 
-        <section className="block grow">
-          <label className="block-label">
-            Mediciones ({current.measurements.length})
-          </label>
-          <ul className="list">
-            {current.measurements.map((m) => (
-              <li key={m.id}>
-                <span className="mrow">
-                  {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}${
-                    m.result.elevGainM != null
-                      ? ` · ↗${m.result.elevGainM.toFixed(0)}m ↘${m.result.elevLossM.toFixed(0)}m`
-                      : ''
-                  }`}
-                  {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
-                  {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.volumeM3)}`}
-                </span>
-                <button className="del" onClick={() => deleteMeasurement(m.id)}>✕</button>
-              </li>
-            ))}
-            {current.measurements.length === 0 && (
-              <li className="muted">Sin mediciones todavía.</li>
-            )}
-          </ul>
+        {tab === 'measure' && (
+          <>
+            <section className="block">
+              <label className="block-label">Herramienta</label>
+              <div className="tools">
+                {TOOLS.map((t) => (
+                  <button
+                    key={t.id}
+                    className={tool === t.id ? 'tool active' : 'tool'}
+                    title={t.hint}
+                    onClick={() => setTool(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {tool === 'volume' && (
+                <div className="row small">
+                  <span>Base</span>
+                  <select value={baseMode} onChange={(e) => setBaseMode(e.target.value)}>
+                    {BASE_MODES.map((b) => (
+                      <option key={b.id} value={b.id}>{b.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
+            </section>
 
-          <label className="block-label">Puntos GPS ({current.points.length})</label>
-          <ul className="list">
-            {current.points.map((p) => {
-              const lv95 = isInSwitzerland(p.lng, p.lat) ? wgs84ToLV95(p.lng, p.lat) : null
-              return (
-                <li key={p.id}>
-                  <span className="mrow" title={`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`}>
-                    📍 {p.label} — {lv95
-                      ? `LV95 ${lv95.e.toFixed(1)}/${lv95.n.toFixed(1)}`
-                      : `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}
-                    {p.elev != null && ` · ${p.elev.toFixed(1)} m`}
-                  </span>
-                </li>
-              )
-            })}
-            {current.points.length === 0 && <li className="muted">Sin puntos todavía.</li>}
-          </ul>
+            <section className="block grow">
+              <label className="block-label">Mediciones ({current.measurements.length})</label>
+              <ul className="list">
+                {current.measurements.map((m) => (
+                  <li key={m.id}>
+                    <span className="mrow">
+                      {m.type === 'distance' && `📏 ${fmtDistance(m.result.lengthM)}${
+                        m.result.elevGainM != null
+                          ? ` · ↗${m.result.elevGainM.toFixed(0)}m ↘${m.result.elevLossM.toFixed(0)}m`
+                          : ''
+                      }`}
+                      {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
+                      {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.fillM3)}${
+                        m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
+                      }`}
+                    </span>
+                    <button className="del" onClick={() => deleteMeasurement(m.id)}>✕</button>
+                  </li>
+                ))}
+                {current.measurements.length === 0 && (
+                  <li className="muted">Sin mediciones todavía.</li>
+                )}
+              </ul>
 
-          <label className="block-label">
-            Puntos de control GCP ({current.gcps.length})
-            <button className="mini" onClick={addGCP}>+ añadir</button>
-          </label>
-          <ul className="list">
-            {current.gcps.map((g) => (
-              <li key={g.id}>
-                <span className="mrow">🎯 {g.name} — {g.lat.toFixed(5)}, {g.lng.toFixed(5)}, {g.elev} m</span>
-              </li>
-            ))}
-            {current.gcps.length === 0 && <li className="muted">Sin GCP. Necesarios para precisión topográfica.</li>}
-          </ul>
-        </section>
+              <label className="block-label">Puntos GPS ({current.points.length})</label>
+              <ul className="list">
+                {current.points.map((p) => {
+                  const lv95 = isInSwitzerland(p.lng, p.lat) ? wgs84ToLV95(p.lng, p.lat) : null
+                  return (
+                    <li key={p.id}>
+                      <span className="mrow" title={`${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`}>
+                        📍 {p.label} — {lv95
+                          ? `LV95 ${lv95.e.toFixed(1)}/${lv95.n.toFixed(1)}`
+                          : `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}
+                        {p.elev != null && ` · ${p.elev.toFixed(1)} m`}
+                      </span>
+                      <button className="del" onClick={() => deletePoint(p.id)}>✕</button>
+                    </li>
+                  )
+                })}
+                {current.points.length === 0 && <li className="muted">Sin puntos todavía.</li>}
+              </ul>
 
-        <section className="block export">
-          <label className="block-label">Exportar</label>
-          <div className="tools">
-            <button onClick={() => exportGeoJSON(current)}>GeoJSON</button>
-            <button onClick={() => exportPointsCSV(current)}>CSV puntos</button>
-            <button onClick={() => exportGCP(current)}>Lista GCP</button>
-          </div>
-        </section>
+              <label className="block-label">
+                Puntos de control GCP ({current.gcps.length})
+                <button className="mini" onClick={addGCP}>+ añadir</button>
+              </label>
+              <ul className="list">
+                {current.gcps.map((g) => (
+                  <li key={g.id}>
+                    <span className="mrow">🎯 {g.name} — {g.lat.toFixed(5)}, {g.lng.toFixed(5)}, {g.elev} m</span>
+                  </li>
+                ))}
+                {current.gcps.length === 0 && (
+                  <li className="muted">Sin GCP. Necesarios para precisión topográfica.</li>
+                )}
+              </ul>
+            </section>
+
+            <section className="block export">
+              <label className="block-label">Exportar</label>
+              <div className="tools">
+                <button onClick={() => exportGeoJSON(current)}>GeoJSON</button>
+                <button onClick={() => exportPointsCSV(current)}>CSV puntos</button>
+                <button onClick={() => exportGCP(current)}>Lista GCP</button>
+              </div>
+            </section>
+          </>
+        )}
       </aside>
 
       <main className="stage">
-        <MapView
-          ref={mapRef}
-          tool={tool}
-          baseMode={baseMode}
-          onMeasurement={handleMeasurement}
-          onPoint={handlePoint}
-          onVolume={handleVolume}
-          onStatus={setStatus}
-        />
+        <MapView ref={mapRef} tool={tool} onDraw={handleDraw} onStatus={setStatus} />
         {status && <div className="status">{status}</div>}
+        {show3D && (
+          <Dsm3DView georaster={mapRef.current.getDSM()} onClose={() => setShow3D(false)} />
+        )}
       </main>
     </div>
   )

@@ -4,8 +4,8 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
-import { loadGeoRaster, computeVolume } from '../lib/raster.js'
-import { lineLengthMeters, polygonMetrics } from '../lib/measure.js'
+import { loadGeoRaster } from '../lib/raster.js'
+import { fmtDistance, fmtArea, fmtVolume } from '../lib/measure.js'
 import { SWISS_LAYERS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
 // Arregla las rutas de los iconos por defecto de Leaflet bajo Vite.
@@ -17,23 +17,27 @@ const DefaultIcon = L.icon({
   iconAnchor: [12, 41],
 })
 
+const STYLE = {
+  distance: { color: '#34d399', weight: 3 },
+  area: { color: '#60a5fa', weight: 2, fillOpacity: 0.15 },
+  volume: { color: '#f59e0b', weight: 2, fillOpacity: 0.15 },
+}
+
 /**
- * Mapa interactivo. Expone métodos imperativos vía ref y notifica resultados
- * de medición al padre mediante callbacks.
+ * Mapa interactivo. El dibujo del usuario se entrega crudo a App vía callbacks
+ * (onDraw); las geometrías persistidas del proyecto se redibujan de forma
+ * declarativa con syncProject(). Así el mapa siempre refleja el estado guardado
+ * (recargas, cambio de proyecto, borrados).
  */
-const MapView = forwardRef(function MapView(
-  { tool, baseMode, onMeasurement, onPoint, onVolume, onStatus },
-  ref
-) {
+const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const orthoRef = useRef(null)
-  const dsmRef = useRef(null) // georaster crudo del DSM para el cálculo de volumen
+  const dsmRef = useRef(null) // georaster crudo del DSM
+  const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
   const toolRef = useRef(tool)
-  const baseModeRef = useRef(baseMode)
 
   useEffect(() => { toolRef.current = tool }, [tool])
-  useEffect(() => { baseModeRef.current = baseMode }, [baseMode])
 
   // Inicialización única del mapa.
   useEffect(() => {
@@ -67,6 +71,8 @@ const MapView = forwardRef(function MapView(
       { position: 'topright' }
     ).addTo(map)
 
+    projectLayerRef.current = L.featureGroup().addTo(map)
+
     // Lectura de coordenadas en vivo: LV95 (oficial suizo) + WGS84.
     const coordsCtl = L.control({ position: 'bottomright' })
     coordsCtl.onAdd = () => {
@@ -87,39 +93,24 @@ const MapView = forwardRef(function MapView(
       }
     })
 
-    // Controles de dibujo de Geoman (los activamos programáticamente por herramienta).
     map.pm.setGlobalOptions({ snappable: true, snapDistance: 15 })
 
-    // Al crear una geometría, calculamos la medida correspondiente.
-    map.on('pm:create', async (e) => {
+    // El dibujo recién creado se elimina y se entrega crudo: App lo procesa,
+    // lo guarda en el proyecto y syncProject() lo redibuja con estilo/popup.
+    map.on('pm:create', (e) => {
       const layer = e.layer
       const active = toolRef.current
+      map.removeLayer(layer)
 
       if (active === 'distance') {
         const coords = layer.getLatLngs().map((p) => [p.lng, p.lat])
-        const meters = lineLengthMeters(coords)
-        onMeasurement?.({ type: 'distance', coords, result: { lengthM: meters }, layer })
-      } else if (active === 'area') {
-        const latlngs = layer.getLatLngs()[0]
-        const ring = latlngs.map((p) => [p.lng, p.lat])
-        const metrics = polygonMetrics(ring)
-        onMeasurement?.({ type: 'area', coords: ring, result: metrics, layer })
-      } else if (active === 'volume') {
-        const latlngs = layer.getLatLngs()[0]
-        const ring = latlngs.map((p) => [p.lng, p.lat])
-        if (!dsmRef.current) {
-          onStatus?.('⚠️ Carga primero un DSM (modelo de elevación) para medir volumen.')
-          map.removeLayer(layer)
-          return
-        }
-        onStatus?.('Calculando volumen…')
-        const vol = computeVolume(dsmRef.current, ring, { baseMode: baseModeRef.current })
-        onVolume?.({ ring, result: vol, layer })
-        onStatus?.(null)
+        onDraw?.({ tool: 'distance', coords })
+      } else if (active === 'area' || active === 'volume') {
+        const ring = layer.getLatLngs()[0].map((p) => [p.lng, p.lat])
+        onDraw?.({ tool: active, coords: ring })
       } else if (active === 'point') {
         const { lng, lat } = layer.getLatLng()
-        onPoint?.({ lng, lat })
-        map.removeLayer(layer) // el marcador lo gestiona el proyecto
+        onDraw?.({ tool: 'point', coords: [lng, lat] })
       }
     })
 
@@ -151,12 +142,42 @@ const MapView = forwardRef(function MapView(
       onStatus?.('Cargando DSM…')
       const georaster = await loadGeoRaster(buffer)
       dsmRef.current = georaster
-      onStatus?.(`DSM cargado (${georaster.width}×${georaster.height} px). Ya puedes medir volumen.`)
+      onStatus?.(`DSM cargado (${georaster.width}×${georaster.height} px). Ya puedes medir volumen y abrir la vista 3D.`)
     },
-    addPointMarker(p) {
-      const marker = L.marker([p.lat, p.lng], { icon: DefaultIcon }).addTo(mapRef.current)
-      marker.bindPopup(`<b>${p.label || 'Punto'}</b><br>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`)
-      return marker
+    getDSM() {
+      return dsmRef.current
+    },
+    /** Redibuja todas las mediciones y puntos del proyecto. */
+    syncProject(project) {
+      const group = projectLayerRef.current
+      if (!group) return
+      group.clearLayers()
+
+      for (const m of project.measurements) {
+        if (m.type === 'distance') {
+          const latlngs = m.coords.map(([lng, lat]) => [lat, lng])
+          L.polyline(latlngs, STYLE.distance)
+            .bindPopup(`📏 ${fmtDistance(m.result?.lengthM)}`)
+            .addTo(group)
+        } else if (m.type === 'area' || m.type === 'volume') {
+          const latlngs = m.coords.map(([lng, lat]) => [lat, lng])
+          const style = STYLE[m.type]
+          const label = m.type === 'area'
+            ? `⬛ ${fmtArea(m.result?.areaM2)}`
+            : `⛰️ ${fmtVolume(m.result?.volumeM3)} (relleno ${fmtVolume(m.result?.fillM3)})`
+          L.polygon(latlngs, style).bindPopup(label).addTo(group)
+        }
+      }
+
+      for (const p of project.points) {
+        const lv95 = isInSwitzerland(p.lng, p.lat) ? wgs84ToLV95(p.lng, p.lat) : null
+        const coordTxt = lv95
+          ? `LV95 ${lv95.e.toFixed(1)} / ${lv95.n.toFixed(1)}`
+          : `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`
+        L.marker([p.lat, p.lng], { icon: DefaultIcon })
+          .bindPopup(`<b>${p.label || 'Punto'}</b><br>${coordTxt}${p.elev != null ? `<br>${p.elev.toFixed(2)} m s.n.m.` : ''}`)
+          .addTo(group)
+      }
     },
     fitToOrtho() {
       if (orthoRef.current) mapRef.current.fitBounds(orthoRef.current.getBounds())

@@ -77,6 +77,44 @@ export async function fetchSwissProfile(coords, nbPoints = 200) {
   }
 }
 
+/**
+ * Muestrea el terreno oficial (swissALTI3D) en una rejilla dentro del bbox de
+ * un polígono. Sirve como superficie base para volúmenes de acopio: el terreno
+ * "sin material" bajo el montón. Limitado a ~maxSamples consultas, en lotes.
+ *
+ * @param {Array<[lng,lat]>} ring
+ * @returns {Promise<Array<{lng:number,lat:number,z:number}>|null>}
+ */
+export async function fetchSwissHeightGrid(ring, maxSamples = 64) {
+  if (!ring?.length || !ring.every(([lng, lat]) => isInSwitzerland(lng, lat))) return null
+  const lngs = ring.map((p) => p[0])
+  const lats = ring.map((p) => p[1])
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+
+  const side = Math.max(2, Math.floor(Math.sqrt(maxSamples)))
+  const points = []
+  for (let i = 0; i < side; i++) {
+    for (let j = 0; j < side; j++) {
+      points.push({
+        lng: minLng + ((i + 0.5) / side) * (maxLng - minLng),
+        lat: minLat + ((j + 0.5) / side) * (maxLat - minLat),
+      })
+    }
+  }
+
+  const out = []
+  const BATCH = 8
+  for (let i = 0; i < points.length; i += BATCH) {
+    const batch = points.slice(i, i + BATCH)
+    const heights = await Promise.all(batch.map((p) => fetchSwissHeight(p.lng, p.lat)))
+    for (let k = 0; k < batch.length; k++) {
+      if (heights[k] != null) out.push({ ...batch[k], z: heights[k] })
+    }
+  }
+  return out.length >= 4 ? out : null
+}
+
 // Capas base WMTS oficiales de swisstopo (open data, sin clave).
 export const SWISS_LAYERS = {
   swissimage: {

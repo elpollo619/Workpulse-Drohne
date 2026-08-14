@@ -39,19 +39,48 @@ function metersPerDegLon(lat) {
 const METERS_PER_DEG_LAT = 110540
 
 /**
+ * Interpolación IDW (inverso de la distancia al cuadrado) desde muestras
+ * {x, y, z} hacia un punto (x, y). Coordenadas en el CRS del raster.
+ */
+function idw(samples, x, y) {
+  let num = 0
+  let den = 0
+  for (const s of samples) {
+    const d2 = (s.x - x) ** 2 + (s.y - y) ** 2
+    if (d2 < 1e-9) return s.z
+    const w = 1 / d2
+    num += w * s.z
+    den += w
+  }
+  return den > 0 ? num / den : 0
+}
+
+/**
  * Calcula el volumen de material contenido dentro de un polígono sobre un DSM.
+ *
+ * Modos de plano base:
+ *  - 'min'       cota mínima dentro del polígono (acopio sobre suelo plano)
+ *  - 'mean'      cota media
+ *  - 'custom'    cota fija (opts.baseValue)
+ *  - 'perimeter' superficie interpolada (IDW) desde las celdas del borde del
+ *                polígono — el estándar profesional para acopios en terreno
+ *                irregular
+ *  - 'grid'      superficie interpolada desde muestras externas
+ *                (opts.baseSamples: [{lng, lat, z}]), p.ej. terreno oficial
+ *                swissALTI3D
  *
  * @param {object} georaster       raster DSM ya parseado
  * @param {Array<[lng,lat]>} ring  anillo del polígono en lng/lat (WGS84)
  * @param {object} opts
- * @param {'min'|'mean'|'custom'} opts.baseMode  cómo definir el plano base
- * @param {number} [opts.baseValue]              cota base si baseMode = 'custom'
- * @returns {{ volumeM3:number, cutM3:number, fillM3:number, baseZ:number,
+ * @param {'min'|'mean'|'custom'|'perimeter'|'grid'} opts.baseMode
+ * @param {number} [opts.baseValue]                     cota si baseMode='custom'
+ * @param {Array<{lng:number,lat:number,z:number}>} [opts.baseSamples]  si baseMode='grid'
+ * @returns {{ volumeM3:number, cutM3:number, fillM3:number, baseZ:number|null,
  *            minZ:number, maxZ:number, meanZ:number, cellCount:number,
  *            sampledAreaM2:number }}
  */
 export function computeVolume(georaster, ring, opts = {}) {
-  const { baseMode = 'min', baseValue } = opts
+  const { baseMode = 'min', baseValue, baseSamples } = opts
   const band = georaster.values[0]
   const noData = georaster.noDataValue
   const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = georaster
@@ -62,11 +91,16 @@ export function computeVolume(georaster, ring, opts = {}) {
   const toLngLat = def
     ? (x, y) => proj4(def, 'EPSG:4326', [x, y])
     : (x, y) => [x, y] // asumimos ya geográfico si no hay def
+  const fromLngLat = def
+    ? (lng, lat) => proj4('EPSG:4326', def, [lng, lat])
+    : (lng, lat) => [lng, lat]
 
   const poly = turfPolygon([[...ring, ring[0]]])
 
-  // 1ª pasada: recolectar cotas dentro del polígono.
-  const inside = [] // { z, areaM2 }
+  // 1ª pasada: recolectar cotas dentro del polígono, con posición de celda
+  // para poder detectar el borde e interpolar planos base no horizontales.
+  const inside = [] // { z, area, x, y, r, c }
+  const insideKeys = new Set()
   let minZ = Infinity
   let maxZ = -Infinity
   let sumZ = 0
@@ -88,7 +122,8 @@ export function computeVolume(georaster, ring, opts = {}) {
       } else {
         cellArea = pixelWidth * pixelHeight // ya en metros
       }
-      inside.push({ z, area: cellArea })
+      inside.push({ z, area: cellArea, x, y, r, c })
+      insideKeys.add(r * width + c)
       if (z < minZ) minZ = z
       if (z > maxZ) maxZ = z
       sumZ += z
@@ -103,20 +138,50 @@ export function computeVolume(georaster, ring, opts = {}) {
   }
 
   const meanZ = sumZ / inside.length
-  let baseZ
-  if (baseMode === 'custom' && typeof baseValue === 'number') baseZ = baseValue
-  else if (baseMode === 'mean') baseZ = meanZ
-  else baseZ = minZ
 
-  // 2ª pasada: integrar volumen sobre/bajo el plano base.
+  // Determina la cota base por celda según el modo.
+  let baseFor // (cell) => cota base
+  let baseZ = null // valor representativo para mostrar (solo planos horizontales)
+
+  if (baseMode === 'grid' && baseSamples?.length) {
+    const samples = baseSamples.map(({ lng, lat, z }) => {
+      const [sx, sy] = fromLngLat(lng, lat)
+      return { x: sx, y: sy, z }
+    })
+    baseFor = (cell) => idw(samples, cell.x, cell.y)
+  } else if (baseMode === 'perimeter') {
+    // Celdas del borde: dentro del polígono con algún 4-vecino fuera.
+    let boundary = inside.filter(({ r, c }) =>
+      !insideKeys.has(r * width + (c - 1)) ||
+      !insideKeys.has(r * width + (c + 1)) ||
+      !insideKeys.has((r - 1) * width + c) ||
+      !insideKeys.has((r + 1) * width + c)
+    )
+    // Submuestreo para mantener el IDW barato en polígonos grandes.
+    const MAX_BOUNDARY = 240
+    if (boundary.length > MAX_BOUNDARY) {
+      const step = boundary.length / MAX_BOUNDARY
+      boundary = Array.from({ length: MAX_BOUNDARY }, (_, i) => boundary[Math.floor(i * step)])
+    }
+    const samples = boundary.map(({ x, y, z }) => ({ x, y, z }))
+    baseFor = (cell) => idw(samples, cell.x, cell.y)
+  } else {
+    if (baseMode === 'custom' && typeof baseValue === 'number') baseZ = baseValue
+    else if (baseMode === 'mean') baseZ = meanZ
+    else baseZ = minZ
+    const flat = baseZ
+    baseFor = () => flat
+  }
+
+  // 2ª pasada: integrar volumen sobre/bajo la superficie base.
   let fill = 0 // material por encima de la base (acopio)
   let cut = 0 // hueco por debajo de la base (excavación)
   let sampledArea = 0
-  for (const { z, area } of inside) {
-    const dz = z - baseZ
-    if (dz >= 0) fill += dz * area
-    else cut += -dz * area
-    sampledArea += area
+  for (const cell of inside) {
+    const dz = cell.z - baseFor(cell)
+    if (dz >= 0) fill += dz * cell.area
+    else cut += -dz * cell.area
+    sampledArea += cell.area
   }
 
   return {

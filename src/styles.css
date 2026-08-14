@@ -202,6 +202,71 @@ button:hover { background: #26333d; }
 /* Ajustes de Leaflet en tema oscuro */
 .leaflet-container { background: #0b0f12; }
 
+/* ---------- Pestañas ---------- */
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+.tabs button {
+  flex: 1;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid transparent;
+}
+.tabs button.active {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---------- Panel de procesamiento ---------- */
+.process-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.small-text { font-size: 12px; }
+.task-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.progress {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s;
+}
+
+/* ---------- Vista 3D del DSM ---------- */
+.dsm3d {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  background: #0b0f12;
+}
+.dsm3d-canvas { flex: 1; }
+.dsm3d-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
 /* Lectura de coordenadas LV95/WGS84 en vivo */
 .coords-readout {
   background: rgba(23, 31, 38, 0.92);

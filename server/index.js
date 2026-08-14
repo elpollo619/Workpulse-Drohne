@@ -28,6 +28,18 @@ const upload = multer({ dest: UPLOAD_DIR })
 
 app.use(express.json())
 
+// CORS abierto para desarrollo (la app corre en otro puerto).
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+
+// Registro en memoria de tareas lanzadas desde esta API (uuid -> metadatos).
+const tasks = new Map()
+
 // Salud del motor.
 app.get('/api/health', async (_req, res) => {
   try {
@@ -39,12 +51,19 @@ app.get('/api/health', async (_req, res) => {
 })
 
 // Crear una tarea de procesamiento con las fotos subidas.
-app.post('/api/tasks', upload.array('images'), async (req, res) => {
-  if (!req.files?.length) return res.status(400).json({ error: 'Sin imágenes' })
+// Acepta también un gcp_list.txt opcional (campo 'gcp') para georreferenciación
+// de precisión con puntos de control.
+app.post('/api/tasks', upload.fields([{ name: 'images' }, { name: 'gcp', maxCount: 1 }]), async (req, res) => {
+  const images = req.files?.images ?? []
+  const gcp = req.files?.gcp?.[0]
+  if (!images.length) return res.status(400).json({ error: 'Sin imágenes' })
   try {
     const form = new FormData()
-    for (const f of req.files) {
+    for (const f of images) {
       form.append('images', fs.createReadStream(f.path), f.originalname)
+    }
+    if (gcp) {
+      form.append('images', fs.createReadStream(gcp.path), 'gcp_list.txt')
     }
     // Opciones de ODM: DSM activado, resolución de orto, calidad de nube, etc.
     const options = req.body.options || JSON.stringify([
@@ -52,7 +71,6 @@ app.post('/api/tasks', upload.array('images'), async (req, res) => {
       { name: 'pc-quality', value: 'high' },
     ])
     form.append('options', options)
-    // Si se envía un gcp_list.txt, se adjunta para georreferenciación con GCP.
     if (req.body.name) form.append('name', req.body.name)
 
     const { data } = await axios.post(`${NODEODM}/task/new`, form, {
@@ -61,11 +79,25 @@ app.post('/api/tasks', upload.array('images'), async (req, res) => {
       maxContentLength: Infinity,
     })
     // Limpia los temporales locales; NodeODM ya tiene copia.
-    for (const f of req.files) fs.unlink(f.path, () => {})
+    for (const f of images) fs.unlink(f.path, () => {})
+    if (gcp) fs.unlink(gcp.path, () => {})
+
+    tasks.set(data.uuid, {
+      uuid: data.uuid,
+      name: req.body.name || `Tarea ${tasks.size + 1}`,
+      imageCount: images.length,
+      withGCP: Boolean(gcp),
+      createdAt: new Date().toISOString(),
+    })
     res.json({ uuid: data.uuid })
   } catch (err) {
     res.status(500).json({ error: 'No se pudo crear la tarea', detail: err.message })
   }
+})
+
+// Lista de tareas lanzadas desde esta API.
+app.get('/api/tasks', (_req, res) => {
+  res.json([...tasks.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
 })
 
 // Estado/progreso de una tarea.

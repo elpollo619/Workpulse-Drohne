@@ -20,8 +20,10 @@ consumo como el **DJI Mini 4 Pro**.
 | 📍 Puntos GPS | ✅ Funcional | Marca y registra coordenadas, exporta CSV/GeoJSON |
 | ⛰️ Volúmenes de acopio | ✅ Funcional | Sobre un DSM (GeoTIFF): plano base mín./medio, corte y relleno |
 | 🎯 Puntos de control (GCP) | ✅ Gestión + exportación | Para georreferenciar con precisión topográfica |
-| 🧊 Modelo 3D / nube de puntos | 🔜 Roadmap | Vía motor de procesamiento (NodeODM) — ver `server/` |
-| ⚙️ Procesar fotos → orto/DSM | 🔜 Esqueleto | Orquestación con OpenDroneMap (`server/`) |
+| 🧊 Vista 3D del terreno | ✅ Funcional | Malla 3D del DSM con Three.js (órbita/zoom, color por elevación) |
+| ⚙️ Procesar fotos → orto/DSM | ✅ Integrado | Pestaña *Procesar*: sube fotos, progreso en vivo, carga automática de resultados (requiere NodeODM en `server/`) |
+| 📐 Volumen base perímetro | ✅ Funcional | Superficie base interpolada del borde del acopio (estándar profesional) |
+| 🏔️ Volumen vs terreno oficial | ✅ Funcional | Base swissALTI3D: volumen = DSM del drone − terreno oficial suizo |
 
 ### 🇨🇭 Integración suiza (swisstopo / geo.admin.ch)
 
