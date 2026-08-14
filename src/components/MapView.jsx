@@ -35,6 +35,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const orthoRef = useRef(null)
   const dsmRef = useRef(null) // georaster crudo del DSM
   const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
+  const planLayerRef = useRef(null) // FeatureGroup con la rejilla del plan de vuelo
   const toolRef = useRef(tool)
 
   useEffect(() => { toolRef.current = tool }, [tool])
@@ -119,6 +120,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     locateCtl.addTo(map)
 
     projectLayerRef.current = L.featureGroup().addTo(map)
+    planLayerRef.current = L.featureGroup().addTo(map)
 
     // Lectura de coordenadas en vivo: LV95 (oficial suizo) + WGS84.
     const coordsCtl = L.control({ position: 'bottomright' })
@@ -152,7 +154,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       if (active === 'distance') {
         const coords = layer.getLatLngs().map((p) => [p.lng, p.lat])
         onDraw?.({ tool: 'distance', coords })
-      } else if (active === 'area' || active === 'volume') {
+      } else if (active === 'area' || active === 'volume' || active === 'plan') {
         const ring = layer.getLatLngs()[0].map((p) => [p.lng, p.lat])
         onDraw?.({ tool: active, coords: ring })
       } else if (active === 'point') {
@@ -170,7 +172,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     if (!map) return
     map.pm.disableDraw()
     if (tool === 'distance') map.pm.enableDraw('Line')
-    else if (tool === 'area' || tool === 'volume') map.pm.enableDraw('Polygon')
+    else if (tool === 'area' || tool === 'volume' || tool === 'plan') map.pm.enableDraw('Polygon')
     else if (tool === 'point') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
   }, [tool])
 
@@ -231,6 +233,26 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     flyTo(lat, lng, zoom = 17) {
       mapRef.current?.flyTo([lat, lng], zoom)
+    },
+    /** Dibuja la serpentina del plan de vuelo con sus puntos de foto. */
+    drawFlightPlan(ring, waypoints) {
+      const group = planLayerRef.current
+      if (!group) return
+      group.clearLayers()
+      L.polygon(ring.map(([lng, lat]) => [lat, lng]), {
+        color: '#a78bfa', weight: 2, dashArray: '6 4', fillOpacity: 0.05,
+      }).addTo(group)
+      L.polyline(waypoints.map(([lng, lat]) => [lat, lng]), {
+        color: '#a78bfa', weight: 2.5,
+      }).addTo(group)
+      for (const [lng, lat] of waypoints) {
+        L.circleMarker([lat, lng], {
+          radius: 3, color: '#a78bfa', fillColor: '#c4b5fd', fillOpacity: 1, weight: 1,
+        }).addTo(group)
+      }
+    },
+    clearFlightPlan() {
+      planLayerRef.current?.clearLayers()
     },
     setOrthoOpacity(v) {
       if (orthoRef.current) orthoRef.current.setOpacity(v)

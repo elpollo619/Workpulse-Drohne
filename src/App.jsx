@@ -8,6 +8,7 @@ import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from 
 import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
 import { computeVolume } from './lib/raster.js'
+import { planGrid, downloadMissionKMZ } from './lib/mission.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid,
   searchSwissLocations, wgs84ToLV95, isInSwitzerland,
@@ -19,6 +20,7 @@ const TOOLS = [
   { id: 'area', label: '⬛ Área', hint: 'Traza un polígono cerrado' },
   { id: 'volume', label: '⛰️ Volumen', hint: 'Requiere DSM cargado; traza el contorno del acopio' },
   { id: 'point', label: '📍 Punto GPS', hint: 'Clic para registrar coordenadas' },
+  { id: 'plan', label: '🛫 Plan de vuelo', hint: 'Dibuja la zona a mapear; se genera la rejilla y la misión KMZ' },
 ]
 
 const BASE_MODES = [
@@ -37,6 +39,7 @@ export default function App() {
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [plan, setPlan] = useState(null) // { ring, params, result }
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const mapRef = useRef(null)
@@ -124,7 +127,22 @@ export default function App() {
       await handleVolume(coords)
     } else if (drawTool === 'point') {
       await handlePoint(coords)
+    } else if (drawTool === 'plan') {
+      updatePlan(coords, plan?.params)
     }
+  }
+
+  // Recalcula la rejilla del plan de vuelo y la dibuja en el mapa.
+  function updatePlan(ring, params) {
+    const p = { altitude: 70, frontOverlap: 0.8, sideOverlap: 0.7, speed: 5, ...params }
+    const result = planGrid(ring, p)
+    setPlan({ ring, params: p, result })
+    mapRef.current?.drawFlightPlan(ring, result.waypoints)
+  }
+
+  function clearPlan() {
+    setPlan(null)
+    mapRef.current?.clearFlightPlan()
   }
 
   async function handleVolume(ring) {
@@ -346,6 +364,74 @@ export default function App() {
               )}
               <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
             </section>
+
+            {plan && (
+              <section className="block plan-panel">
+                <label className="block-label">
+                  🛫 Plan de vuelo
+                  <button className="mini" onClick={clearPlan}>✕ quitar</button>
+                </label>
+                <div className="row small">
+                  <span>Altura: <b>{plan.params.altitude} m</b></span>
+                  <input
+                    type="range" min="40" max="120" step="5"
+                    value={plan.params.altitude}
+                    onChange={(e) => updatePlan(plan.ring, { ...plan.params, altitude: +e.target.value })}
+                  />
+                </div>
+                <div className="row small">
+                  <span>Solape frontal: <b>{Math.round(plan.params.frontOverlap * 100)}%</b></span>
+                  <input
+                    type="range" min="70" max="90" step="5"
+                    value={plan.params.frontOverlap * 100}
+                    onChange={(e) => updatePlan(plan.ring, { ...plan.params, frontOverlap: +e.target.value / 100 })}
+                  />
+                </div>
+                <div className="row small">
+                  <span>Solape lateral: <b>{Math.round(plan.params.sideOverlap * 100)}%</b></span>
+                  <input
+                    type="range" min="60" max="85" step="5"
+                    value={plan.params.sideOverlap * 100}
+                    onChange={(e) => updatePlan(plan.ring, { ...plan.params, sideOverlap: +e.target.value / 100 })}
+                  />
+                </div>
+                <div className="row small">
+                  <span>Velocidad: <b>{plan.params.speed} m/s</b></span>
+                  <input
+                    type="range" min="2" max="8" step="1"
+                    value={plan.params.speed}
+                    onChange={(e) => updatePlan(plan.ring, { ...plan.params, speed: +e.target.value })}
+                  />
+                </div>
+                <div className="plan-stats">
+                  <span>📷 {plan.result.photoCount} fotos</span>
+                  <span>📏 GSD {plan.result.gsdCM.toFixed(1)} cm/px</span>
+                  <span>➰ {plan.result.lines} líneas</span>
+                  <span>🛣️ {(plan.result.distanceM / 1000).toFixed(2)} km</span>
+                  <span>⏱️ ~{Math.ceil(plan.result.durationMin)} min</span>
+                </div>
+                {plan.result.tooMany && (
+                  <p className="hint">
+                    ⚠️ Demasiados waypoints para DJI Fly (~180 máx). Sube la altura
+                    o reduce la zona.
+                  </p>
+                )}
+                {plan.result.durationMin > 25 && (
+                  <p className="hint">⚠️ Supera una batería (~30 min reales). Divide la zona en dos vuelos.</p>
+                )}
+                <button
+                  disabled={plan.result.tooMany}
+                  onClick={() => downloadMissionKMZ(current.name, plan.result.waypoints, plan.params)}
+                >
+                  💾 Descargar misión KMZ (DJI Fly)
+                </button>
+                <p className="hint">
+                  Instálala en el mando reemplazando el archivo de una misión creada
+                  en DJI Fly (guía: <code>docs/PLAN-DE-VUELO.md</code>). Verifica el
+                  primer vuelo visualmente.
+                </p>
+              </section>
+            )}
 
             <section className="block grow">
               <label className="block-label">Mediciones ({current.measurements.length})</label>
