@@ -52,3 +52,100 @@
   inset: 0;
 }
 .app360-stage .pano360 { position: fixed; }
+
+.app360-rooms b { font-size: 13px; color: var(--muted); }
+.app360-rooms .list { margin-top: 8px; }
+
+/* Panel de mediciones del visor */
+.pano360-panel {
+  position: absolute;
+  top: 64px;
+  right: 10px;
+  width: 230px;
+  max-height: calc(100% - 160px);
+  overflow-y: auto;
+  background: rgba(23, 31, 38, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pano360-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pano360-panel li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+}
+.pano360-panel li.empty { background: none; border: none; color: var(--muted); }
+.pano360-panel .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.pano360-panel .lbl { font-weight: 600; }
+.pano360-panel .val { margin-left: auto; white-space: nowrap; }
+.pano360-panel .del { background: none; border: none; color: var(--danger); padding: 0 2px; }
+.pano360-top select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px;
+  max-width: 150px;
+}
+
+/* Plano de planta */
+.floorplan {
+  position: absolute;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+.floorplan-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  max-width: 720px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.floorplan-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.floorplan-svg {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 767px) {
+  .pano360-panel {
+    top: auto;
+    bottom: 96px;
+    right: 8px;
+    width: 180px;
+    max-height: 40%;
+  }
+}
