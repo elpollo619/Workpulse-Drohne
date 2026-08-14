@@ -1,0 +1,54 @@
+/* Estilos propios de Workpulse 360 (la base viene de ../src/styles.css). */
+
+.app360-landing {
+  min-height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 48px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.app360-landing .brand h1 { font-size: 30px; }
+.app360-landing .brand p { font-size: 14px; }
+
+.app360-open {
+  font-size: 16px;
+  padding: 18px;
+  border-width: 2px;
+}
+
+.app360-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.app360-step {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 13px;
+}
+.app360-step b { color: var(--accent); }
+.app360-step p { margin: 6px 0 0; color: var(--text); line-height: 1.55; }
+
+.app360-note { font-size: 12px; line-height: 1.6; }
+
+.app360-foot {
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.app360-foot a { color: var(--accent); }
+
+/* El visor ocupa toda la pantalla en esta app. */
+.app360-stage {
+  position: fixed;
+  inset: 0;
+}
+.app360-stage .pano360 { position: fixed; }

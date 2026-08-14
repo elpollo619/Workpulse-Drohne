@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
-import Pano360View from './components/Pano360View.jsx'
 import GcpEditor from './components/GcpEditor.jsx'
 import ProfileChart from './components/ProfileChart.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
@@ -40,7 +39,6 @@ export default function App() {
   const [status, setStatus] = useState(null)
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
-  const [pano360URL, setPano360URL] = useState(null)
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
@@ -356,22 +354,13 @@ export default function App() {
               🧊 Vista 3D del terreno
             </button>
 
-            <label className="block-label">Cámara 360° (Insta360, etc.)</label>
-            <label className="filebtn">
-              📷 Abrir foto 360° y medir
-              <input
-                type="file" accept="image/jpeg,image/png" hidden
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) setPano360URL(URL.createObjectURL(f))
-                  e.target.value = ''
-                }}
-              />
-            </label>
+            <label className="block-label">Interiores / cámara 360°</label>
+            <a className="filebtn applink" href="./360/">
+              📷 Abrir Workpulse 360 ↗
+            </a>
             <p className="hint">
-              Exporta la foto en formato equirectangular (360° completa) desde la
-              app Insta360. Con la altura de la cámara podrás medir distancias
-              reales sobre el suelo.
+              La medición con cámaras 360° (Insta360) es una app aparte, hecha
+              para espacios interiores.
             </p>
           </section>
         )}
@@ -578,15 +567,6 @@ export default function App() {
         {status && <div className="status">{status}</div>}
         {show3D && (
           <Dsm3DView georaster={mapRef.current.getDSM()} onClose={() => setShow3D(false)} />
-        )}
-        {pano360URL && (
-          <Pano360View
-            imageURL={pano360URL}
-            onClose={() => {
-              URL.revokeObjectURL(pano360URL)
-              setPano360URL(null)
-            }}
-          />
         )}
         {showGcpEditor && (
           <GcpEditor
