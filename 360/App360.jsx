@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import Pano360View from '../src/components/Pano360View.jsx'
 import FloorPlan from './FloorPlan.jsx'
+import { openSessionReport } from './report360.js'
 
 const STORE_KEY = 'workpulse360.measurements.v1'
+const NAMES_KEY = 'workpulse360.roomnames.v1'
 
-function loadStore() {
+function loadJSON(key) {
   try {
-    return JSON.parse(localStorage.getItem(STORE_KEY)) ?? {}
+    return JSON.parse(localStorage.getItem(key)) ?? {}
   } catch {
     return {}
   }
@@ -20,13 +22,35 @@ function loadStore() {
 export default function App360() {
   const [photos, setPhotos] = useState([]) // { name, url }
   const [activeName, setActiveName] = useState(null)
-  const [store, setStore] = useState(loadStore) // { [photoName]: measurements[] }
+  const [store, setStore] = useState(() => loadJSON(STORE_KEY)) // { [photoName]: measurements[] }
+  const [roomNames, setRoomNames] = useState(() => loadJSON(NAMES_KEY)) // { [photoName]: 'Salón' }
   const [showPlan, setShowPlan] = useState(false)
 
-  // Persistencia de mediciones por nombre de foto.
+  // Persistencia por nombre de foto.
   useEffect(() => {
     localStorage.setItem(STORE_KEY, JSON.stringify(store))
   }, [store])
+  useEffect(() => {
+    localStorage.setItem(NAMES_KEY, JSON.stringify(roomNames))
+  }, [roomNames])
+
+  function renameRoom(photoName) {
+    const name = prompt('Nombre del espacio (p.ej. Salón, Cocina):', roomNames[photoName] ?? '')
+    if (name === null) return
+    setRoomNames((prev) => ({ ...prev, [photoName]: name.trim() }))
+  }
+
+  function renameMeasurement(id) {
+    const ms = store[activeName] ?? []
+    const m = ms.find((x) => x.id === id)
+    if (!m) return
+    const label = prompt('Etiqueta de la medición:', m.label)
+    if (!label) return
+    setStore((prev) => ({
+      ...prev,
+      [activeName]: (prev[activeName] ?? []).map((x) => (x.id === id ? { ...x, label: label.trim() } : x)),
+    }))
+  }
 
   const active = photos.find((p) => p.name === activeName) ?? null
   const measurements = store[activeName] ?? []
@@ -82,28 +106,35 @@ export default function App360() {
           measurements={measurements}
           onSave={saveMeasurement}
           onDelete={deleteMeasurement}
+          onRename={renameMeasurement}
           onOpenPlan={() => setShowPlan(true)}
           onClose={() => setActiveName(null)}
           extraControls={
-            photos.length > 1 ? (
-              <select
-                value={activeName}
-                onChange={(e) => setActiveName(e.target.value)}
-                title="Cambiar de foto/habitación"
-              >
-                {photos.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    🖼️ {p.name} ({(store[p.name] ?? []).length})
-                  </option>
-                ))}
-              </select>
-            ) : null
+            <>
+              {photos.length > 1 && (
+                <select
+                  value={activeName}
+                  onChange={(e) => setActiveName(e.target.value)}
+                  title="Cambiar de foto/habitación"
+                >
+                  {photos.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      🖼️ {roomNames[p.name] || p.name} ({(store[p.name] ?? []).length})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button onClick={() => renameRoom(active.name)} title="Nombrar este espacio">
+                🏷️ {roomNames[active.name] || 'nombrar'}
+              </button>
+            </>
           }
         />
         {showPlan && (
           <FloorPlan
             measurements={measurements}
             photoName={active.name}
+            roomName={roomNames[active.name]}
             onClose={() => setShowPlan(false)}
           />
         )}
@@ -112,6 +143,10 @@ export default function App360() {
   }
 
   const totalMeasurements = Object.values(store).reduce((s, ms) => s + ms.length, 0)
+  const totalArea = Object.values(store)
+    .flat()
+    .filter((m) => m.mode === 'area')
+    .reduce((s, m) => s + m.value, 0)
 
   return (
     <div className="app360-landing">
@@ -127,11 +162,13 @@ export default function App360() {
 
       {photos.length > 0 && (
         <section className="app360-rooms">
-          <b>Sesión actual</b>
+          <b>Sesión actual{totalArea > 0 ? ` · superficie total ${totalArea.toFixed(2)} m²` : ''}</b>
           <ul className="list">
             {photos.map((p) => (
               <li key={p.name} onClick={() => setActiveName(p.name)} style={{ cursor: 'pointer' }}>
-                <span className="mrow">🖼️ {p.name} · {(store[p.name] ?? []).length} mediciones</span>
+                <span className="mrow">
+                  🖼️ {roomNames[p.name] || p.name} · {(store[p.name] ?? []).length} mediciones
+                </span>
               </li>
             ))}
           </ul>
@@ -164,7 +201,10 @@ export default function App360() {
       </section>
 
       {totalMeasurements > 0 && (
-        <button onClick={exportCSV}>📄 Exportar todas las mediciones (CSV) — {totalMeasurements}</button>
+        <div className="tools">
+          <button onClick={exportCSV}>📄 CSV ({totalMeasurements})</button>
+          <button onClick={() => openSessionReport(store, roomNames)}>🖨️ Informe de sesión</button>
+        </div>
       )}
 
       <p className="hint app360-note">

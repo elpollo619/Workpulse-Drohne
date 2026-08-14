@@ -133,11 +133,13 @@
   gap: 10px;
   font-size: 13px;
 }
-.floorplan-svg {
+.floorplan-svg,
+.floorplan-svgwrap svg {
   width: 100%;
   height: auto;
   border-radius: 8px;
   border: 1px solid var(--line);
+  display: block;
 }
 
 @media (max-width: 767px) {

@@ -23,7 +23,7 @@ export const MEASURE_COLORS = [
  * medición; el borrador en curso va en blanco.
  */
 export default function Pano360View({
-  imageURL, measurements = [], onSave, onDelete, onOpenPlan, onClose, extraControls,
+  imageURL, measurements = [], onSave, onDelete, onRename, onOpenPlan, onClose, extraControls,
 }) {
   const mountRef = useRef(null)
   const stateRef = useRef({})
@@ -330,7 +330,14 @@ export default function Pano360View({
             {measurements.map((mm, idx) => (
               <li key={mm.id}>
                 <span className="dot" style={{ background: MEASURE_COLORS[idx % MEASURE_COLORS.length] }} />
-                <span className="lbl">{mm.label}</span>
+                <span
+                  className="lbl"
+                  style={{ cursor: 'pointer' }}
+                  title="Clic para renombrar"
+                  onClick={() => onRename?.(mm.id)}
+                >
+                  {mm.label}
+                </span>
                 <span className="val">
                   {mm.value.toFixed(2)} {mm.unit}
                   {mm.mode === 'area' && mm.perimeter ? ` · per. ${mm.perimeter.toFixed(1)} m` : ''}
