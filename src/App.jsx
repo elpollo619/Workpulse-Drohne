@@ -62,6 +62,24 @@ export default function App() {
     if (window.innerWidth < 768) setSidebarOpen(false)
   }
 
+  const isDrawingTool = ['distance', 'area', 'volume', 'plan'].includes(tool)
+
+  // Atajos de teclado durante el dibujo: Esc reinicia, Retroceso deshace punto,
+  // Enter termina.
+  useEffect(() => {
+    if (!isDrawingTool) return
+    const onKey = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      if (e.key === 'Escape') mapRef.current?.cancelDraw(tool)
+      else if (e.key === 'Backspace') {
+        e.preventDefault()
+        mapRef.current?.undoVertex()
+      } else if (e.key === 'Enter') mapRef.current?.finishDraw()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tool, isDrawingTool])
+
   // Garantiza que exista al menos un proyecto.
   useEffect(() => {
     if (projects.length === 0) {
@@ -516,6 +534,22 @@ export default function App() {
 
       <main className="stage">
         <MapView ref={mapRef} tool={tool} onDraw={handleDraw} onStatus={setStatus} />
+        {isDrawingTool && (
+          <div className="draw-toolbar">
+            <button onClick={() => mapRef.current?.undoVertex()} title="Deshacer último punto (Retroceso)">
+              ↩️ Deshacer punto
+            </button>
+            <button onClick={() => mapRef.current?.finishDraw()} title="Terminar con los puntos puestos (Enter)">
+              ✔️ Terminar
+            </button>
+            <button onClick={() => mapRef.current?.cancelDraw(tool)} title="Borrar todo y empezar de nuevo (Esc)">
+              🗑️ Reiniciar
+            </button>
+            <button onClick={() => setTool('pan')} title="Salir del modo dibujo">
+              ✕ Salir
+            </button>
+          </div>
+        )}
         {status && <div className="status">{status}</div>}
         {show3D && (
           <Dsm3DView georaster={mapRef.current.getDSM()} onClose={() => setShow3D(false)} />

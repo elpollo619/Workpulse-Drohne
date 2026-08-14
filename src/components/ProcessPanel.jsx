@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { checkHealth, createTask, getTask, downloadAsset, TASK_STATUS, STATUS_COMPLETED, STATUS_FAILED } from '../lib/api.js'
+import { checkHealth, createTask, getTask, downloadAsset, openQualityReport, TASK_STATUS, STATUS_COMPLETED, STATUS_FAILED } from '../lib/api.js'
 
 /**
  * Panel de procesamiento fotogramétrico: sube las fotos del vuelo al servidor
@@ -116,6 +116,20 @@ export default function ProcessPanel({ projectName, onLoadOrtho, onLoadDSM, onSt
               </button>
               <button onClick={() => loadResult('dsm.tif', onLoadDSM, 'DSM')}>
                 ⛰️ Cargar DSM
+              </button>
+              <button
+                onClick={async () => {
+                  onStatus?.('Abriendo informe de calidad…')
+                  try {
+                    await openQualityReport(task.uuid)
+                    onStatus?.(null)
+                  } catch (err) {
+                    onStatus?.(`Informe no disponible: ${err.message}`)
+                  }
+                }}
+                title="Informe PDF de OpenDroneMap: cobertura, calibración, error de reproyección, GSD real"
+              >
+                📊 Informe calidad
               </button>
             </div>
           )}

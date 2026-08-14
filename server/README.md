@@ -17,7 +17,18 @@ la app: **ortomosaico**, **DSM** y **nube de puntos**.
                                              ortho.tif · dsm.tif · nube.laz
 ```
 
-## Puesta en marcha
+## Puesta en marcha — un solo comando
+
+```bash
+bash server/install.sh
+```
+
+El instalador comprueba Docker y Node, levanta NodeODM, espera a que
+responda, instala dependencias y arranca la API. Deja la terminal abierta y
+la pestaña **⚙️ Procesar** de la app queda operativa.
+
+<details>
+<summary>Pasos manuales equivalentes</summary>
 
 ```bash
 # 1. Levanta el motor OpenDroneMap
@@ -27,6 +38,7 @@ docker compose up -d          # NodeODM en http://localhost:3000
 npm install
 npm start                     # API en http://localhost:4000
 ```
+</details>
 
 ## Endpoints
 

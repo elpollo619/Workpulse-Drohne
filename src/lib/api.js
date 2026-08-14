@@ -62,3 +62,14 @@ export async function downloadAsset(uuid, asset) {
   if (!res.ok) throw new Error(`Asset no disponible (${res.status})`)
   return res.arrayBuffer()
 }
+
+/**
+ * Abre el informe de calidad PDF que genera OpenDroneMap (report.pdf) en una
+ * pestaña nueva: cobertura de fotos, calibración de cámaras, error de
+ * reproyección, GSD real, etc.
+ */
+export async function openQualityReport(uuid) {
+  const buf = await downloadAsset(uuid, 'report.pdf')
+  const url = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }))
+  window.open(url, '_blank')
+}
