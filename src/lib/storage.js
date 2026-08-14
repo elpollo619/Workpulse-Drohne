@@ -21,8 +21,9 @@ export function newProject(name) {
     id: crypto.randomUUID(),
     name: name || `Proyecto ${new Date().toLocaleDateString()}`,
     createdAt: new Date().toISOString(),
-    measurements: [], // { id, type: 'distance'|'area', coords, result }
+    measurements: [], // { id, type: 'distance'|'area'|'volume', coords, result }
     points: [],       // { id, label, lng, lat, elev, note }
     gcps: [],         // { id, name, lng, lat, elev, note }
+    gcpMarks: [],     // { id, gcpId, image, x, y }  marca píxel<->terreno en una foto
   }
 }

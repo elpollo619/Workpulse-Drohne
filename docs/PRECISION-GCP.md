@@ -56,20 +56,23 @@ centimétrica.
 3. **Vuela** cubriendo toda la zona con solape alto (ver
    [FLUJO-DE-TRABAJO.md](FLUJO-DE-TRABAJO.md)); asegúrate de que las dianas
    queden nítidas en varias fotos.
-4. **Procesa con GCP** en WebODM/OpenDroneMap: usa el editor de GCP de WebODM
-   para marcar, en cada foto, el píxel donde aparece cada diana. WebODM genera
-   el `gcp_list.txt` completo:
+4. **Marca las dianas con el editor visual integrado** (panel *Puntos de
+   control GCP → 🎯 editor*): añade las fotos del vuelo, elige cada diana y
+   toca con un clic el centro exacto donde aparece en cada foto (mínimo 3
+   fotos por diana; el editor lleva la cuenta). El botón
+   **💾 Exportar gcp_list.txt** genera el archivo completo:
    ```
-   <EPSG:xxxx>
-   geo_x geo_y geo_z  im_x im_y  nombre_imagen.jpg  gcp_name
+   EPSG:4326
+   lng lat elev  px py  nombre_imagen.jpg  gcp_name
    ...
    ```
-   El botón **Lista GCP** de esta app exporta la parte de coordenadas de terreno
-   (cabecera + `geo_x geo_y geo_z` por punto); el emparejamiento con píxeles se
-   hace en WebODM.
-5. **Verifica el error:** WebODM reporta el error de reproyección de los GCP
-   (idealmente pocos cm). Deja 1–2 GCP como *checkpoints* para validar.
-6. **Mide** cargando el ortomosaico y el DSM ya georreferenciados en esta app.
+5. **Procesa con el archivo**: en la pestaña ⚙️ Procesar, adjunta el
+   `gcp_list.txt` junto a las fotos antes de lanzar. OpenDroneMap ancla la
+   reconstrucción a tus dianas.
+6. **Verifica el error:** el 📊 Informe de calidad reporta el error de
+   reproyección de los GCP (idealmente pocos cm). Deja 1–2 GCP como
+   *checkpoints* para validar.
+7. **Mide** cargando el ortomosaico y el DSM ya georreferenciados en esta app.
 
 ## Buenas prácticas de exactitud
 

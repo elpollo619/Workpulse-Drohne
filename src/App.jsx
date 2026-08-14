@@ -3,6 +3,7 @@ import MapView from './components/MapView.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
 import Pano360View from './components/Pano360View.jsx'
+import GcpEditor from './components/GcpEditor.jsx'
 import ProfileChart from './components/ProfileChart.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
@@ -40,6 +41,7 @@ export default function App() {
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
   const [pano360URL, setPano360URL] = useState(null)
+  const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
   const [query, setQuery] = useState('')
@@ -521,7 +523,10 @@ export default function App() {
 
               <label className="block-label">
                 Puntos de control GCP ({current.gcps.length})
-                <button className="mini" onClick={addGCP}>+ añadir</button>
+                <span>
+                  <button className="mini" onClick={addGCP}>+ añadir</button>{' '}
+                  <button className="mini" onClick={() => setShowGcpEditor(true)}>🎯 editor</button>
+                </span>
               </label>
               <ul className="list">
                 {current.gcps.map((g) => (
@@ -581,6 +586,29 @@ export default function App() {
               URL.revokeObjectURL(pano360URL)
               setPano360URL(null)
             }}
+          />
+        )}
+        {showGcpEditor && (
+          <GcpEditor
+            gcps={current.gcps}
+            marks={current.gcpMarks ?? []}
+            onAddMark={(gcpId, image, x, y) =>
+              updateCurrent((p) => {
+                // Una marca por diana y foto: recolocar reemplaza.
+                const rest = (p.gcpMarks ?? []).filter(
+                  (m) => !(m.gcpId === gcpId && m.image === image)
+                )
+                p.gcpMarks = [...rest, { id: crypto.randomUUID(), gcpId, image, x, y }]
+                return p
+              })
+            }
+            onDeleteMark={(id) =>
+              updateCurrent((p) => {
+                p.gcpMarks = (p.gcpMarks ?? []).filter((m) => m.id !== id)
+                return p
+              })
+            }
+            onClose={() => setShowGcpEditor(false)}
           />
         )}
       </main>
