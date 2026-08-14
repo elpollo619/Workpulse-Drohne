@@ -267,6 +267,88 @@ button:hover { background: #26333d; }
   font-size: 13px;
 }
 
+/* ---------- Buscador de lugares ---------- */
+.search-block { position: relative; }
+.search-block input {
+  width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.search-results li {
+  padding: 7px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.search-results li:hover { background: var(--accent-2); color: #fff; }
+
+/* ---------- Perfil de elevación en la lista ---------- */
+.list li.with-chart { align-items: flex-start; }
+.mitem { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.profile-chart { width: 100%; height: 44px; display: block; }
+.profile-label { fill: var(--muted); font-size: 9px; font-family: system-ui, sans-serif; }
+
+/* ---------- Botón GPS del mapa ---------- */
+.locate-btn {
+  display: block;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  background: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* ---------- Toggle del panel (móvil y escritorio) ---------- */
+.sidebar-toggle {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1500;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 16px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.sidebar.hidden { display: none; }
+
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 60px 0 0;
+    z-index: 1400;
+    width: auto;
+    min-width: 0;
+    padding-top: 56px;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+}
+@media (min-width: 768px) {
+  .sidebar { padding-top: 54px; }
+}
+
 /* Lectura de coordenadas LV95/WGS84 en vivo */
 .coords-readout {
   background: rgba(23, 31, 38, 0.92);

@@ -119,6 +119,30 @@ export async function fetchSwissHeightGrid(ring, maxSamples = 64) {
   return out.length >= 4 ? out : null
 }
 
+/**
+ * Búsqueda oficial de direcciones y lugares suizos (geo.admin.ch SearchServer).
+ * @returns {Promise<Array<{label:string, lat:number, lng:number}>>}
+ */
+export async function searchSwissLocations(text, limit = 6) {
+  if (!text?.trim()) return []
+  const url = `https://api3.geo.admin.ch/rest/services/api/SearchServer?sr=4326&searchText=${encodeURIComponent(text)}&type=locations&limit=${limit}`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.results ?? [])
+      .filter((r) => r.attrs?.lat != null && r.attrs?.lon != null)
+      .map((r) => ({
+        // Las etiquetas vienen con HTML (<b>...</b>); se limpia para mostrar.
+        label: (r.attrs.label ?? '').replace(/<[^>]*>/g, ''),
+        lat: r.attrs.lat,
+        lng: r.attrs.lon,
+      }))
+  } catch {
+    return []
+  }
+}
+
 // Capas base WMTS oficiales de swisstopo (open data, sin clave).
 export const SWISS_LAYERS = {
   swissimage: {
@@ -132,6 +156,24 @@ export const SWISS_LAYERS = {
     url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg',
     attribution: '© swisstopo',
     maxNativeZoom: 18,
+  },
+}
+
+// Overlays oficiales opcionales (se superponen a la capa base).
+export const SWISS_OVERLAYS = {
+  cadastral: {
+    name: '📐 Catastro (parcelas)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.kantone.cadastralwebmap-farbe/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© swisstopo / cantones',
+    maxNativeZoom: 18,
+    opacity: 0.75,
+  },
+  hillshade: {
+    name: '⛰️ Relieve (sombreado)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissalti3d-reliefschattierung/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© swisstopo',
+    maxNativeZoom: 17,
+    opacity: 0.5,
   },
 }
 
