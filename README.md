@@ -24,6 +24,8 @@ consumo como el **DJI Mini 4 Pro**.
 | ⚙️ Procesar fotos → orto/DSM | ✅ Integrado | Pestaña *Procesar*: sube fotos, progreso en vivo, carga automática de resultados (requiere NodeODM en `server/`) |
 | 📐 Volumen base perímetro | ✅ Funcional | Superficie base interpolada del borde del acopio (estándar profesional) |
 | 🏔️ Volumen vs terreno oficial | ✅ Funcional | Base swissALTI3D: volumen = DSM del drone − terreno oficial suizo |
+| 🛫 Plan de vuelo automático | ✅ Funcional | Polígono → rejilla óptima → misión KMZ para DJI Fly (Mini 4 Pro) |
+| 📷 Foto 360° con medición | ✅ Funcional | Insta360/equirectangular: distancias reales sobre el suelo con altura de cámara conocida |
 
 ### 🇨🇭 Integración suiza (swisstopo / geo.admin.ch)
 
