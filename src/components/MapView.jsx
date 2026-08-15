@@ -161,7 +161,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       } else if (active === 'area' || active === 'volume' || active === 'plan') {
         const ring = layer.getLatLngs()[0].map((p) => [p.lng, p.lat])
         onDraw?.({ tool: active, coords: ring })
-      } else if (active === 'point' || active === 'solar' || active === 'intel') {
+      } else if (active === 'point' || active === 'solar' || active === 'intel' || active === 'orbit') {
         const { lng, lat } = layer.getLatLng()
         onDraw?.({ tool: active, coords: [lng, lat] })
       }
@@ -177,7 +177,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     map.pm.disableDraw()
     if (tool === 'distance') map.pm.enableDraw('Line')
     else if (tool === 'area' || tool === 'volume' || tool === 'plan') map.pm.enableDraw('Polygon')
-    else if (tool === 'point' || tool === 'solar' || tool === 'intel') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
+    else if (tool === 'point' || tool === 'solar' || tool === 'intel' || tool === 'orbit') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
   }, [tool])
 
   useImperativeHandle(ref, () => ({
@@ -354,6 +354,29 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     clearFlightPlan() {
       planLayerRef.current?.clearLayers()
+    },
+    /** Dibuja la misión de órbita: círculo alrededor del edificio y puntos de
+     *  foto coloreados por nivel de altura. */
+    drawOrbit(center, radius, waypoints) {
+      const group = planLayerRef.current
+      if (!group) return
+      group.clearLayers()
+      const LEVEL_COLORS = ['#fbbf24', '#fb923c', '#f87171']
+      L.circle([center[1], center[0]], {
+        radius, color: '#fbbf24', weight: 2, dashArray: '6 4', fillOpacity: 0.04,
+      }).addTo(group)
+      L.circleMarker([center[1], center[0]], {
+        radius: 5, color: '#fbbf24', fillColor: '#fde68a', fillOpacity: 1, weight: 2,
+      }).bindTooltip('🏠 centro', { direction: 'top' }).addTo(group)
+      for (const wp of waypoints) {
+        L.circleMarker([wp.lat, wp.lng], {
+          radius: 3,
+          color: LEVEL_COLORS[wp.level ?? 0],
+          fillColor: LEVEL_COLORS[wp.level ?? 0],
+          fillOpacity: 0.9,
+          weight: 1,
+        }).addTo(group)
+      }
     },
     /** Dibuja el techo consultado con su informe solar en un popup. */
     drawSolarRoof(rings, html) {

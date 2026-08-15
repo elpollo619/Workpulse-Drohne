@@ -109,33 +109,88 @@ export function planGrid(ring, opts = {}) {
   }
 }
 
-const wpXML = (wp, i, altitude, speed, isFirst) => `    <Placemark>
-      <Point><coordinates>${wp[0].toFixed(8)},${wp[1].toFixed(8)}</coordinates></Point>
-      <wpml:index>${i}</wpml:index>
-      <wpml:executeHeight>${altitude}</wpml:executeHeight>
-      <wpml:waypointSpeed>${speed}</wpml:waypointSpeed>
-      <wpml:waypointHeadingParam>
-        <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>
-      </wpml:waypointHeadingParam>
-      <wpml:waypointTurnParam>
-        <wpml:waypointTurnMode>toPointAndStopWithDiscontinuityCurvature</wpml:waypointTurnMode>
-        <wpml:waypointTurnDampingDist>0</wpml:waypointTurnDampingDist>
-      </wpml:waypointTurnParam>
-      <wpml:useStraightLine>1</wpml:useStraightLine>
-${isFirst ? `      <wpml:actionGroup>
-        <wpml:actionGroupId>100</wpml:actionGroupId>
-        <wpml:actionGroupStartIndex>0</wpml:actionGroupStartIndex>
-        <wpml:actionGroupEndIndex>0</wpml:actionGroupEndIndex>
-        <wpml:actionGroupMode>sequence</wpml:actionGroupMode>
-        <wpml:actionTrigger><wpml:actionTriggerType>reachPoint</wpml:actionTriggerType></wpml:actionTrigger>
-        <wpml:action>
-          <wpml:actionId>100</wpml:actionId>
+/**
+ * 🏠 Misión de órbita para fachadas: círculos a varias alturas alrededor de un
+ * edificio, con el drone siempre mirando al centro y el gimbal apuntando a la
+ * fachada o al techo según el nivel. Es lo que capta ventanas, puertas y
+ * aleros que una rejilla nadir (mirando hacia abajo) nunca ve.
+ *
+ * @param {[number, number]} center   centro del edificio [lng, lat]
+ * @param {object} opts
+ * @param {number} opts.radius            radio de órbita en m (def. 15)
+ * @param {number} opts.buildingHeightM   altura del edificio en m (def. 8)
+ * @param {number} opts.photosPerOrbit    fotos por vuelta (def. 24)
+ * @param {number} opts.speed             velocidad m/s (def. 2.5)
+ */
+export function planOrbit(center, opts = {}) {
+  const { radius = 15, buildingHeightM = 8, photosPerOrbit = 24, speed = 2.5 } = opts
+  const [lng0, lat0] = center
+  const kx = metersPerDegLon(lat0)
+  const H = buildingHeightM
+  const cam = MINI4PRO
+
+  // Tres niveles: fachada baja (cámara casi horizontal), fachada alta/aleros,
+  // y techo en oblicuo. "aim" es la altura del edificio a la que apunta.
+  const levels = [
+    { alt: Math.max(4, H * 0.45), aim: H * 0.45 },
+    { alt: H + 3, aim: H * 0.8 },
+    { alt: H + Math.max(6, radius * 0.6), aim: H },
+  ]
+
+  const round1 = (v) => Math.round(v * 10) / 10
+  const waypoints = []
+  for (let li = 0; li < levels.length; li++) {
+    const lv = levels[li]
+    const pitch = round1(-(Math.atan2(lv.alt - lv.aim, radius) * 180) / Math.PI)
+    lv.pitch = pitch
+    for (let k = 0; k < photosPerOrbit; k++) {
+      // Sentido alterno por nivel: ahorra el retorno al punto inicial.
+      const dir = li % 2 === 0 ? 1 : -1
+      const theta = dir * ((2 * Math.PI * k) / photosPerOrbit)
+      const x = radius * Math.sin(theta)
+      const y = radius * Math.cos(theta)
+      // Rumbo hacia el centro: vector (-x, -y); ángulo horario desde el norte.
+      let heading = (Math.atan2(-x, -y) * 180) / Math.PI
+      if (heading > 180) heading -= 360
+      waypoints.push({
+        lng: lng0 + x / kx,
+        lat: lat0 + y / METERS_PER_DEG_LAT,
+        alt: round1(lv.alt),
+        headingDeg: round1(heading),
+        gimbalPitchDeg: Math.max(-90, Math.min(20, pitch)),
+        level: li,
+      })
+    }
+  }
+
+  // GSD sobre la fachada a la distancia del radio (mejor que en nadir).
+  const gsdCM = ((cam.sensorWidthMM * radius * 1000) / (cam.focalMM * cam.imageWidthPX)) / 10
+  const distanceM =
+    levels.length * 2 * Math.PI * radius +
+    levels.reduce((s, lv, i) => s + (i ? Math.abs(lv.alt - levels[i - 1].alt) : lv.alt), 0)
+  const durationMin = (distanceM / speed + waypoints.length * 3 + 90) / 60
+  const maxAlt = Math.max(...levels.map((l) => l.alt))
+
+  return {
+    waypoints,
+    photoCount: waypoints.length,
+    gsdCM,
+    distanceM,
+    durationMin,
+    maxAlt,
+    levels: levels.map((l) => ({ alt: round1(l.alt), pitch: l.pitch })),
+    tooMany: waypoints.length > 180,
+  }
+}
+
+const gimbalActionXML = (id, pitch) => `        <wpml:action>
+          <wpml:actionId>${id}</wpml:actionId>
           <wpml:actionActuatorFunc>gimbalRotate</wpml:actionActuatorFunc>
           <wpml:actionActuatorFuncParam>
             <wpml:gimbalHeadingYawBase>aircraft</wpml:gimbalHeadingYawBase>
             <wpml:gimbalRotateMode>absoluteAngle</wpml:gimbalRotateMode>
             <wpml:gimbalPitchRotateEnable>1</wpml:gimbalPitchRotateEnable>
-            <wpml:gimbalPitchRotateAngle>-90</wpml:gimbalPitchRotateAngle>
+            <wpml:gimbalPitchRotateAngle>${pitch}</wpml:gimbalPitchRotateAngle>
             <wpml:gimbalRollRotateEnable>0</wpml:gimbalRollRotateEnable>
             <wpml:gimbalRollRotateAngle>0</wpml:gimbalRollRotateAngle>
             <wpml:gimbalYawRotateEnable>0</wpml:gimbalYawRotateEnable>
@@ -144,23 +199,64 @@ ${isFirst ? `      <wpml:actionGroup>
             <wpml:gimbalRotateTime>0</wpml:gimbalRotateTime>
             <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
           </wpml:actionActuatorFuncParam>
-        </wpml:action>
-      </wpml:actionGroup>
-` : ''}      <wpml:actionGroup>
+        </wpml:action>`
+
+// Un waypoint puede ser [lng, lat] (rejilla nadir) u objeto
+// { lng, lat, alt?, headingDeg?, gimbalPitchDeg? } (órbita de fachadas).
+const wpXML = (wp, i, altitude, speed, isFirst) => {
+  const lng = wp.lng ?? wp[0]
+  const lat = wp.lat ?? wp[1]
+  const height = wp.alt ?? altitude
+  // Rumbo: por defecto sigue la línea; con headingDeg gira suavemente hasta
+  // ese rumbo (apuntando al edificio en las órbitas).
+  const headingXML = wp.headingDeg != null
+    ? `      <wpml:waypointHeadingParam>
+        <wpml:waypointHeadingMode>smoothTransition</wpml:waypointHeadingMode>
+        <wpml:waypointHeadingAngle>${wp.headingDeg}</wpml:waypointHeadingAngle>
+        <wpml:waypointPoiPoint>0.000000,0.000000,0.000000</wpml:waypointPoiPoint>
+        <wpml:waypointHeadingAngleEnable>1</wpml:waypointHeadingAngleEnable>
+        <wpml:waypointHeadingPathMode>followBadArc</wpml:waypointHeadingPathMode>
+      </wpml:waypointHeadingParam>`
+    : `      <wpml:waypointHeadingParam>
+        <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>
+      </wpml:waypointHeadingParam>`
+
+  // Acciones al llegar: gimbal (si procede) y foto, en secuencia.
+  const actions = []
+  if (wp.gimbalPitchDeg != null) {
+    actions.push(gimbalActionXML(i * 10 + 1, wp.gimbalPitchDeg))
+  } else if (isFirst) {
+    actions.push(gimbalActionXML(100, -90)) // rejilla nadir: cámara vertical
+  }
+  actions.push(`        <wpml:action>
+          <wpml:actionId>${i * 10 + 2}</wpml:actionId>
+          <wpml:actionActuatorFunc>takePhoto</wpml:actionActuatorFunc>
+          <wpml:actionActuatorFuncParam>
+            <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
+          </wpml:actionActuatorFuncParam>
+        </wpml:action>`)
+
+  return `    <Placemark>
+      <Point><coordinates>${lng.toFixed(8)},${lat.toFixed(8)}</coordinates></Point>
+      <wpml:index>${i}</wpml:index>
+      <wpml:executeHeight>${height}</wpml:executeHeight>
+      <wpml:waypointSpeed>${speed}</wpml:waypointSpeed>
+${headingXML}
+      <wpml:waypointTurnParam>
+        <wpml:waypointTurnMode>toPointAndStopWithDiscontinuityCurvature</wpml:waypointTurnMode>
+        <wpml:waypointTurnDampingDist>0</wpml:waypointTurnDampingDist>
+      </wpml:waypointTurnParam>
+      <wpml:useStraightLine>1</wpml:useStraightLine>
+      <wpml:actionGroup>
         <wpml:actionGroupId>${i + 1}</wpml:actionGroupId>
         <wpml:actionGroupStartIndex>${i}</wpml:actionGroupStartIndex>
         <wpml:actionGroupEndIndex>${i}</wpml:actionGroupEndIndex>
         <wpml:actionGroupMode>sequence</wpml:actionGroupMode>
         <wpml:actionTrigger><wpml:actionTriggerType>reachPoint</wpml:actionTriggerType></wpml:actionTrigger>
-        <wpml:action>
-          <wpml:actionId>${i + 1}</wpml:actionId>
-          <wpml:actionActuatorFunc>takePhoto</wpml:actionActuatorFunc>
-          <wpml:actionActuatorFuncParam>
-            <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
-          </wpml:actionActuatorFuncParam>
-        </wpml:action>
+${actions.join('\n')}
       </wpml:actionGroup>
     </Placemark>`
+}
 
 /** Genera el XML de waylines.wpml para la misión. */
 export function buildWaylinesWPML(waypoints, { altitude = 70, speed = 5 } = {}) {

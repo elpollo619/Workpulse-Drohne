@@ -64,6 +64,20 @@ export async function downloadAsset(uuid, asset) {
 }
 
 /**
+ * Descarga un producto del resultado directamente a disco (modelo 3D
+ * texturizado, nube de puntos LAZ…) sin cargarlo en memoria de la app.
+ */
+export async function saveAsset(uuid, asset, filename) {
+  const buf = await downloadAsset(uuid, asset)
+  const url = URL.createObjectURL(new Blob([buf]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
  * Abre el informe de calidad PDF que genera OpenDroneMap (report.pdf) en una
  * pestaña nueva: cobertura de fotos, calibración de cámaras, error de
  * reproyección, GSD real, etc.

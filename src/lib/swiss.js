@@ -47,7 +47,9 @@ export async function fetchSwissHeight(lng, lat) {
   const { e, n } = wgs84ToLV95(lng, lat)
   const url = `https://api3.geo.admin.ch/rest/services/height?easting=${e.toFixed(1)}&northing=${n.toFixed(1)}&sr=2056`
   try {
-    const res = await fetch(url)
+    // Tiempo límite: con mala cobertura en campo, mejor un punto sin cota que
+    // una app congelada esperando la respuesta.
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const data = await res.json()
     const h = parseFloat(data.height)

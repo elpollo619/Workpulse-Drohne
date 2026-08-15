@@ -15,7 +15,7 @@ import { polygon as turfPolygon, point as turfPoint } from '@turf/helpers'
 import { EPSG_2056 } from './swiss.js'
 
 /** Devuelve una definición proj4 para un código EPSG común (4326, 3857, UTM, LV95). */
-function proj4defForEPSG(epsg) {
+export function proj4defForEPSG(epsg) {
   if (!epsg) return null
   if (epsg === 4326) return 'EPSG:4326'
   if (epsg === 3857) return 'EPSG:3857'

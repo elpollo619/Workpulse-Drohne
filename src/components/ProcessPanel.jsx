@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { checkHealth, createTask, getTask, downloadAsset, openQualityReport, TASK_STATUS, STATUS_COMPLETED, STATUS_FAILED } from '../lib/api.js'
+import { checkHealth, createTask, getTask, downloadAsset, saveAsset, openQualityReport, TASK_STATUS, STATUS_COMPLETED, STATUS_FAILED } from '../lib/api.js'
 
 /**
  * Panel de procesamiento fotogramétrico: sube las fotos del vuelo al servidor
@@ -130,6 +130,34 @@ export default function ProcessPanel({ projectName, onLoadOrtho, onLoadDSM, onSt
                 title="Informe PDF de OpenDroneMap: cobertura, calibración, error de reproyección, GSD real"
               >
                 📊 Informe calidad
+              </button>
+              <button
+                onClick={async () => {
+                  onStatus?.('Descargando modelo 3D texturizado…')
+                  try {
+                    await saveAsset(task.uuid, 'textured_model.zip', `${projectName || 'modelo'}-3d-obj.zip`)
+                    onStatus?.('🏠 Modelo 3D (OBJ) descargado — impórtalo en ArchiCAD/Vectorworks/Blender.')
+                  } catch (err) {
+                    onStatus?.(`Modelo 3D no disponible: ${err.message}`)
+                  }
+                }}
+                title="Malla 3D texturizada (OBJ + texturas) generada por OpenDroneMap"
+              >
+                🏠 Modelo 3D (OBJ)
+              </button>
+              <button
+                onClick={async () => {
+                  onStatus?.('Descargando nube de puntos…')
+                  try {
+                    await saveAsset(task.uuid, 'georeferenced_model.laz', `${projectName || 'nube'}.laz`)
+                    onStatus?.('☁️ Nube de puntos LAZ descargada — impórtala en ArchiCAD/Vectorworks/CloudCompare.')
+                  } catch (err) {
+                    onStatus?.(`Nube de puntos no disponible: ${err.message}`)
+                  }
+                }}
+                title="Nube de puntos georreferenciada (LAZ) generada por OpenDroneMap"
+              >
+                ☁️ Nube (LAZ)
               </button>
             </div>
           )}
