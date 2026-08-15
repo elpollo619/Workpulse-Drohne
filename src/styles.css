@@ -436,6 +436,37 @@ a.applink {
 .weather-reasons { margin: 0; padding-left: 18px; color: var(--muted); }
 .weather-reasons li { margin: 2px 0; }
 
+/* ---------- Radiografía del terreno ---------- */
+.intel-card {
+  position: absolute;
+  top: 60px;
+  right: 10px;
+  z-index: 1150;
+  width: 300px;
+  max-width: calc(100% - 20px);
+  background: rgba(23, 31, 38, 0.97);
+  border: 1px solid var(--accent-2);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.intel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.intel-row { line-height: 1.5; }
+.intel-no { color: #fca5a5; }
+.intel-ok { color: var(--accent); }
+@media (max-width: 767px) {
+  .intel-card { top: auto; bottom: 108px; right: 8px; }
+}
+
 /* ---------- Editor visual de GCP ---------- */
 .gcp-editor {
   position: absolute;

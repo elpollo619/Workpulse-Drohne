@@ -161,7 +161,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       } else if (active === 'area' || active === 'volume' || active === 'plan') {
         const ring = layer.getLatLngs()[0].map((p) => [p.lng, p.lat])
         onDraw?.({ tool: active, coords: ring })
-      } else if (active === 'point' || active === 'solar') {
+      } else if (active === 'point' || active === 'solar' || active === 'intel') {
         const { lng, lat } = layer.getLatLng()
         onDraw?.({ tool: active, coords: [lng, lat] })
       }
@@ -177,7 +177,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     map.pm.disableDraw()
     if (tool === 'distance') map.pm.enableDraw('Line')
     else if (tool === 'area' || tool === 'volume' || tool === 'plan') map.pm.enableDraw('Polygon')
-    else if (tool === 'point' || tool === 'solar') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
+    else if (tool === 'point' || tool === 'solar' || tool === 'intel') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
   }, [tool])
 
   useImperativeHandle(ref, () => ({
