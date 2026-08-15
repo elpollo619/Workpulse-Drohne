@@ -13,7 +13,7 @@ import { planGrid, downloadMissionKMZ } from './lib/mission.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid, fetchSolarRoof,
-  searchSwissLocations, wgs84ToLV95, isInSwitzerland,
+  fetchTerrainIntel, searchSwissLocations, wgs84ToLV95, isInSwitzerland,
 } from './lib/swiss.js'
 import { parsePhotoMeta } from './lib/exif.js'
 import { MINI4PRO } from './lib/mission.js'
@@ -26,6 +26,7 @@ const TOOLS = [
   { id: 'point', label: '📍 Punto GPS', hint: 'Clic para registrar coordenadas' },
   { id: 'plan', label: '🛫 Plan de vuelo', hint: 'Dibuja la zona a mapear; se genera la rejilla y la misión KMZ' },
   { id: 'solar', label: '☀️ Techo solar', hint: 'Toca un techo: informe solar oficial (sonnendach.ch) al instante' },
+  { id: 'intel', label: '🧠 Radiografía', hint: 'Toca cualquier punto: dossier oficial completo del sitio en un segundo' },
 ]
 
 const BASE_MODES = [
@@ -49,6 +50,7 @@ export default function App() {
   const [plan, setPlan] = useState(null) // { ring, params, result }
   const [weather, setWeather] = useState(null) // condiciones de vuelo
   const [weatherBusy, setWeatherBusy] = useState(false)
+  const [intel, setIntel] = useState(null) // radiografía del terreno
 
   async function checkWeather() {
     const c = mapRef.current?.getCenter()
@@ -172,6 +174,55 @@ export default function App() {
       updatePlan(coords, plan?.params)
     } else if (drawTool === 'solar') {
       await handleSolar(coords)
+    } else if (drawTool === 'intel') {
+      await handleIntel(coords)
+    }
+  }
+
+  // 🧠 Radiografía del terreno: todas las fuentes oficiales + meteo, a la vez.
+  async function handleIntel([lng, lat]) {
+    setStatus('🧠 Cruzando todas las fuentes oficiales…')
+    try {
+      const [terrain, wx] = await Promise.all([
+        fetchTerrainIntel(lng, lat),
+        fetchFlightConditions(lat, lng).catch(() => null),
+      ])
+      setIntel({ ...terrain, weather: wx })
+      setStatus(null)
+    } catch (err) {
+      setStatus(`No se pudo completar la radiografía: ${err.message}`)
+    }
+  }
+
+  function printIntel() {
+    if (!intel) return
+    const esc = (s) => String(s ?? '—')
+    const w = intel.weather
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Radiografía del terreno</title>
+<style>body{font-family:system-ui,sans-serif;color:#111;margin:32px;max-width:640px}h1{font-size:20px;margin:0 0 4px}
+.sub{color:#666;font-size:12px;margin-bottom:18px}h2{font-size:14px;border-bottom:1px solid #ccc;padding-bottom:3px;margin-top:18px}
+p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margin-top:28px;color:#999;font-size:10px}</style></head><body>
+<h1>🧠 Radiografía del terreno — Workpulse Drohne</h1>
+<div class="sub">Generado: ${new Date().toLocaleString('es-CH')} · WGS84 ${intel.lat.toFixed(6)}, ${intel.lng.toFixed(6)} · LV95 ${intel.e.toFixed(1)} / ${intel.n.toFixed(1)}</div>
+<h2>Terreno</h2><p>Elevación oficial (swissALTI3D): <b>${intel.heightM != null ? intel.heightM.toFixed(1) + ' m s.n.m.' : '—'}</b></p>
+<h2>Drones (BAZL)</h2>${intel.droneZones.length
+      ? intel.droneZones.map((z) => `<p class="no">🚫 <b>${esc(z.name)}</b>${z.restriction ? ' — ' + esc(z.restriction) : ''}</p>`).join('')
+      : '<p>✅ Sin zonas de restricción registradas en este punto.</p>'}
+<h2>Ordenación del territorio (ARE)</h2><p>${intel.bauzone
+      ? `Zona de construcción: <b>${esc(intel.bauzone.tipo)}</b> · ${esc(intel.bauzone.municipio)} (${esc(intel.bauzone.canton)})`
+      : 'Fuera de zona de construcción registrada.'}</p>
+<h2>Solar (BFE)</h2><p>${intel.solar
+      ? `Techo: aptitud <b>${esc(intel.solar.klasseText)}</b> · ${intel.solar.areaM2?.toFixed(0)} m² · ${Math.round(intel.solar.yearlyKWh ?? 0).toLocaleString('es-CH')} kWh/año estimados`
+      : 'Sin techo en el catastro solar en este punto.'}</p>
+<h2>Meteo ahora</h2><p>${w
+      ? `${w.verdict.level === 'ok' ? '✅' : w.verdict.level === 'warn' ? '⚠️' : '❌'} viento ${w.windMS.toFixed(1)} m/s · rachas ${w.gustMS.toFixed(1)} · ${w.tempC.toFixed(0)} °C · sol ${w.sunElev.toFixed(0)}°${w.windows.length ? ` · mejores horas: ${w.windows.join(', ')}` : ''}`
+      : 'No disponible.'}</p>
+<footer>Fuentes oficiales: swisstopo (swissALTI3D), BAZL/OFAC, ARE, BFE/sonnendach.ch, Open-Meteo. Informe orientativo; verifica la normativa vigente antes de volar.</footer>
+<script>window.onload=()=>setTimeout(()=>window.print(),300)</script></body></html>`
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(html)
+      win.document.close()
     }
   }
 
@@ -765,6 +816,43 @@ export default function App() {
             <button onClick={() => setTool('pan')} title="Salir del modo dibujo">
               ✕ Salir
             </button>
+          </div>
+        )}
+        {intel && (
+          <div className="intel-card">
+            <div className="intel-head">
+              <b>🧠 Radiografía del terreno</b>
+              <span>
+                <button className="mini" onClick={printIntel}>🖨️ PDF</button>{' '}
+                <button className="mini" onClick={() => setIntel(null)}>✕</button>
+              </span>
+            </div>
+            <div className="intel-row">📍 LV95 {intel.e.toFixed(1)} / {intel.n.toFixed(1)} · {intel.heightM != null ? `${intel.heightM.toFixed(1)} m s.n.m.` : ''}</div>
+            <div className="intel-row">
+              {intel.droneZones.length
+                ? intel.droneZones.map((z, i) => (
+                    <div key={i} className="intel-no">🚫 {z.name}{z.restriction ? ` — ${z.restriction}` : ''}</div>
+                  ))
+                : <span className="intel-ok">✅ Sin restricciones de drones registradas aquí</span>}
+            </div>
+            <div className="intel-row">
+              🏗️ {intel.bauzone
+                ? `${intel.bauzone.tipo ?? 'Zona de construcción'} · ${intel.bauzone.municipio ?? ''} (${intel.bauzone.canton ?? ''})`
+                : 'Fuera de zona de construcción registrada'}
+            </div>
+            {intel.solar && (
+              <div className="intel-row">
+                ☀️ Techo: {intel.solar.klasseText} · {intel.solar.areaM2?.toFixed(0)} m² ·{' '}
+                {Math.round(intel.solar.yearlyKWh ?? 0).toLocaleString('es-CH')} kWh/año
+              </div>
+            )}
+            {intel.weather && (
+              <div className="intel-row">
+                {intel.weather.verdict.level === 'ok' ? '✅' : intel.weather.verdict.level === 'warn' ? '⚠️' : '❌'}{' '}
+                💨 {intel.weather.windMS.toFixed(1)} m/s · 🌡️ {intel.weather.tempC.toFixed(0)} °C · ☀️ {intel.weather.sunElev.toFixed(0)}°
+                {intel.weather.windows.length > 0 && ` · mejores horas: ${intel.weather.windows.join(', ')}`}
+              </div>
+            )}
           </div>
         )}
         {status && <div className="status">{status}</div>}

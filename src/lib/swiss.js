@@ -144,6 +144,62 @@ export async function searchSwissLocations(text, limit = 6) {
 }
 
 /**
+ * Consulta genérica identify de geo.admin.ch en un punto WGS84.
+ * @returns {Promise<Array>} resultados (attributes por feature)
+ */
+export async function identifyAt(lng, lat, layer, tolerance = 0) {
+  if (!isInSwitzerland(lng, lat)) return []
+  const { e, n } = wgs84ToLV95(lng, lat)
+  const ext = 1000
+  const url =
+    'https://api3.geo.admin.ch/rest/services/api/MapServer/identify' +
+    `?geometry=${e.toFixed(1)},${n.toFixed(1)}&geometryType=esriGeometryPoint` +
+    `&layers=all:${layer}&tolerance=${tolerance}&sr=2056` +
+    `&mapExtent=${(e - ext).toFixed(0)},${(n - ext).toFixed(0)},${(e + ext).toFixed(0)},${(n + ext).toFixed(0)}` +
+    '&imageDisplay=100,100,96&returnGeometry=false'
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.results ?? []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 🧠 Radiografía del terreno: cruza en paralelo todas las fuentes oficiales
+ * para un punto — elevación, restricciones de drones (BAZL), zona de
+ * construcción (ARE) y techo solar si lo hay.
+ */
+export async function fetchTerrainIntel(lng, lat) {
+  const [height, bazl, bauzone, solar] = await Promise.all([
+    fetchSwissHeight(lng, lat),
+    identifyAt(lng, lat, 'ch.bazl.einschraenkungen-drohnen', 0),
+    identifyAt(lng, lat, 'ch.are.bauzonen', 5),
+    fetchSolarRoof(lng, lat),
+  ])
+  const { e, n } = wgs84ToLV95(lng, lat)
+  return {
+    lat, lng, e, n,
+    heightM: height,
+    droneZones: bazl.map((r) => ({
+      name: r.attributes?.zone_name_es ?? r.attributes?.zone_name_en ?? r.attributes?.zone_name_de ?? 'Zona restringida',
+      restriction: r.attributes?.zone_restriction_en ?? r.attributes?.zone_restriction_de ?? null,
+      authUrl: r.attributes?.auth_url_en ?? null,
+    })),
+    bauzone: bauzone[0]
+      ? {
+          municipio: bauzone[0].attributes?.name ?? null,
+          tipo: bauzone[0].attributes?.ch_bez_d ?? bauzone[0].attributes?.ch_bez_f ?? null,
+          canton: bauzone[0].attributes?.kt_kz ?? null,
+        }
+      : null,
+    solar,
+  }
+}
+
+/**
  * Datos solares oficiales del techo en un punto (BFE/sonnendach.ch), vía la
  * API identify de geo.admin.ch. Devuelve aptitud, radiación, superficie,
  * orientación, inclinación, producción anual estimada y el polígono del techo.
