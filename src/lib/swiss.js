@@ -143,6 +143,52 @@ export async function searchSwissLocations(text, limit = 6) {
   }
 }
 
+/**
+ * Datos solares oficiales del techo en un punto (BFE/sonnendach.ch), vía la
+ * API identify de geo.admin.ch. Devuelve aptitud, radiación, superficie,
+ * orientación, inclinación, producción anual estimada y el polígono del techo.
+ */
+export async function fetchSolarRoof(lng, lat) {
+  if (!isInSwitzerland(lng, lat)) return null
+  const { e, n } = wgs84ToLV95(lng, lat)
+  const ext = 500
+  const url =
+    'https://api3.geo.admin.ch/rest/services/api/MapServer/identify' +
+    `?geometry=${e.toFixed(1)},${n.toFixed(1)}&geometryType=esriGeometryPoint` +
+    '&layers=all:ch.bfe.solarenergie-eignung-daecher&tolerance=2&sr=2056' +
+    `&mapExtent=${(e - ext).toFixed(0)},${(n - ext).toFixed(0)},${(e + ext).toFixed(0)},${(n + ext).toFixed(0)}` +
+    '&imageDisplay=100,100,96&returnGeometry=true'
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    const f = data.results?.[0]
+    if (!f) return null
+    const a = f.attributes ?? {}
+    // Anillos LV95 -> WGS84 para dibujar el techo.
+    const rings = (f.geometry?.rings ?? []).map((ring) =>
+      ring.map(([re, rn]) => {
+        const { lng: rlng, lat: rlat } = lv95ToWGS84(re, rn)
+        return [rlat, rlng]
+      })
+    )
+    const KLASSE = { 1: 'Baja', 2: 'Media', 3: 'Buena', 4: 'Muy buena', 5: 'Excelente' }
+    return {
+      klasse: a.klasse ?? null,
+      klasseText: KLASSE[a.klasse] ?? '—',
+      radiationKWhM2: a.mstrahlung ?? null, // radiación media kWh/m²·año
+      areaM2: a.flaeche ?? null,
+      orientationDeg: a.ausrichtung ?? null,
+      tiltDeg: a.neigung ?? null,
+      yearlyKWh: a.stromertrag ?? null,
+      buildingId: a.building_id ?? null,
+      rings,
+    }
+  } catch {
+    return null
+  }
+}
+
 // Capas base WMTS oficiales de swisstopo (open data, sin clave).
 export const SWISS_LAYERS = {
   swissimage: {
@@ -181,6 +227,13 @@ export const SWISS_OVERLAYS = {
     attribution: '© BAZL/OFAC',
     maxNativeZoom: 18,
     opacity: 0.6,
+  },
+  solarRoofs: {
+    name: '☀️ Potencial solar de techos (BFE)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bfe.solarenergie-eignung-daecher/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BFE/OFEN',
+    maxNativeZoom: 18,
+    opacity: 0.7,
   },
 }
 

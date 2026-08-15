@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
-import { loadGeoRaster } from '../lib/raster.js'
+import { loadGeoRaster, buildDiffGrid } from '../lib/raster.js'
 import { fmtDistance, fmtArea, fmtVolume } from '../lib/measure.js'
 import { SWISS_LAYERS, SWISS_OVERLAYS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
@@ -35,6 +35,9 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const orthoRef = useRef(null)
   const dsmRef = useRef(null) // georaster crudo del DSM
   const dsmPrevRef = useRef(null) // DSM del vuelo anterior (comparación)
+  const heatmapRef = useRef(null) // overlay del mapa de calor de cambios
+  const solarLayerRef = useRef(null) // techo del informe solar
+  const coverageLayerRef = useRef(null) // fotos del vuelo (cobertura)
   const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
   const planLayerRef = useRef(null) // FeatureGroup con la rejilla del plan de vuelo
   const toolRef = useRef(tool)
@@ -158,9 +161,9 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       } else if (active === 'area' || active === 'volume' || active === 'plan') {
         const ring = layer.getLatLngs()[0].map((p) => [p.lng, p.lat])
         onDraw?.({ tool: active, coords: ring })
-      } else if (active === 'point') {
+      } else if (active === 'point' || active === 'solar') {
         const { lng, lat } = layer.getLatLng()
-        onDraw?.({ tool: 'point', coords: [lng, lat] })
+        onDraw?.({ tool: active, coords: [lng, lat] })
       }
     })
 
@@ -174,7 +177,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     map.pm.disableDraw()
     if (tool === 'distance') map.pm.enableDraw('Line')
     else if (tool === 'area' || tool === 'volume' || tool === 'plan') map.pm.enableDraw('Polygon')
-    else if (tool === 'point') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
+    else if (tool === 'point' || tool === 'solar') map.pm.enableDraw('Marker', { markerStyle: { icon: DefaultIcon } })
   }, [tool])
 
   useImperativeHandle(ref, () => ({
@@ -205,6 +208,31 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     getDSMPrev() {
       return dsmPrevRef.current
+    },
+    /**
+     * Pinta (o quita) el mapa de calor de cambios entre el DSM actual y el
+     * anterior: rojo = material añadido, azul = retirado.
+     * @returns {null|{minDz:number, maxDz:number}} estadísticas, o null si se quitó
+     */
+    toggleDiffHeatmap() {
+      const map = mapRef.current
+      if (heatmapRef.current) {
+        map.removeLayer(heatmapRef.current)
+        heatmapRef.current = null
+        return null
+      }
+      if (!dsmRef.current || !dsmPrevRef.current) return undefined
+      const g = buildDiffGrid(dsmRef.current, dsmPrevRef.current)
+      const canvas = document.createElement('canvas')
+      canvas.width = g.gw
+      canvas.height = g.gh
+      canvas.getContext('2d').putImageData(new ImageData(g.rgba, g.gw, g.gh), 0, 0)
+      heatmapRef.current = L.imageOverlay(canvas.toDataURL(), g.bounds, {
+        opacity: 0.85,
+        interactive: false,
+      }).addTo(map)
+      map.fitBounds(g.bounds)
+      return { minDz: g.minDz, maxDz: g.maxDz }
     },
     /** Redibuja todas las mediciones y puntos del proyecto. */
     syncProject(project) {
@@ -312,6 +340,48 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     clearFlightPlan() {
       planLayerRef.current?.clearLayers()
+    },
+    /** Dibuja el techo consultado con su informe solar en un popup. */
+    drawSolarRoof(rings, html) {
+      const map = mapRef.current
+      if (!map || !rings?.length) return
+      if (solarLayerRef.current) map.removeLayer(solarLayerRef.current)
+      const poly = L.polygon(rings, { color: '#fbbf24', weight: 3, fillOpacity: 0.25 })
+      solarLayerRef.current = poly.addTo(map)
+      poly.bindPopup(html, { maxWidth: 260 }).openPopup()
+    },
+    /**
+     * Pinta las posiciones de las fotos del vuelo (verificación de cobertura):
+     * puntos, trayectoria y huella aproximada de cada disparo.
+     */
+    showFlightPhotos(metas, footprintRadiusFor) {
+      const map = mapRef.current
+      if (!map) return
+      if (coverageLayerRef.current) map.removeLayer(coverageLayerRef.current)
+      const group = L.featureGroup()
+      const path = []
+      for (const m of metas) {
+        path.push([m.lat, m.lng])
+        const r = footprintRadiusFor(m)
+        L.circle([m.lat, m.lng], {
+          radius: r, color: '#22d3ee', weight: 1, fillColor: '#22d3ee', fillOpacity: 0.12,
+        }).addTo(group)
+        L.circleMarker([m.lat, m.lng], {
+          radius: 3.5, color: '#fff', weight: 1, fillColor: '#22d3ee', fillOpacity: 1,
+        }).bindPopup(`📷 ${m.name}<br>${m.lat.toFixed(6)}, ${m.lng.toFixed(6)}${m.altAGL != null ? `<br>altura ${m.altAGL.toFixed(0)} m AGL` : ''}`)
+          .addTo(group)
+      }
+      if (path.length >= 2) {
+        L.polyline(path, { color: '#22d3ee', weight: 1.5, dashArray: '4 4' }).addTo(group)
+      }
+      coverageLayerRef.current = group.addTo(map)
+      if (path.length) map.fitBounds(group.getBounds().pad(0.15))
+    },
+    clearFlightPhotos() {
+      if (coverageLayerRef.current) {
+        mapRef.current?.removeLayer(coverageLayerRef.current)
+        coverageLayerRef.current = null
+      }
     },
     setOrthoOpacity(v) {
       if (orthoRef.current) orthoRef.current.setOpacity(v)

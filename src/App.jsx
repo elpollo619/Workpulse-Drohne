@@ -12,9 +12,11 @@ import { computeVolume, computeVolumeDiff } from './lib/raster.js'
 import { planGrid, downloadMissionKMZ } from './lib/mission.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import {
-  fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid,
+  fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid, fetchSolarRoof,
   searchSwissLocations, wgs84ToLV95, isInSwitzerland,
 } from './lib/swiss.js'
+import { parsePhotoMeta } from './lib/exif.js'
+import { MINI4PRO } from './lib/mission.js'
 
 const TOOLS = [
   { id: 'pan', label: '✋ Mover', hint: 'Navegar por el mapa' },
@@ -23,6 +25,7 @@ const TOOLS = [
   { id: 'volume', label: '⛰️ Volumen', hint: 'Requiere DSM cargado; traza el contorno del acopio' },
   { id: 'point', label: '📍 Punto GPS', hint: 'Clic para registrar coordenadas' },
   { id: 'plan', label: '🛫 Plan de vuelo', hint: 'Dibuja la zona a mapear; se genera la rejilla y la misión KMZ' },
+  { id: 'solar', label: '☀️ Techo solar', hint: 'Toca un techo: informe solar oficial (sonnendach.ch) al instante' },
 ]
 
 const BASE_MODES = [
@@ -167,7 +170,63 @@ export default function App() {
       await handlePoint(coords)
     } else if (drawTool === 'plan') {
       updatePlan(coords, plan?.params)
+    } else if (drawTool === 'solar') {
+      await handleSolar(coords)
     }
+  }
+
+  // Informe solar oficial del techo tocado (BFE/sonnendach.ch).
+  async function handleSolar([lng, lat]) {
+    setStatus('Consultando el catastro solar oficial…')
+    const roof = await fetchSolarRoof(lng, lat)
+    if (!roof) {
+      setStatus('⚠️ Ahí no hay ningún techo en el catastro solar (¿tocaste un edificio en Suiza?).')
+      return
+    }
+    const html =
+      `<b>☀️ Informe solar oficial</b><br>` +
+      `Aptitud: <b>${roof.klasseText}</b> (${roof.klasse}/5)<br>` +
+      (roof.areaM2 != null ? `Superficie: ${roof.areaM2.toFixed(0)} m²<br>` : '') +
+      (roof.tiltDeg != null ? `Inclinación: ${roof.tiltDeg}°· ` : '') +
+      (roof.orientationDeg != null ? `Orientación: ${roof.orientationDeg}°<br>` : '') +
+      (roof.radiationKWhM2 != null ? `Radiación: ${roof.radiationKWhM2.toFixed(0)} kWh/m²·año<br>` : '') +
+      (roof.yearlyKWh != null ? `<b>Producción estimada: ${Math.round(roof.yearlyKWh).toLocaleString('es-CH')} kWh/año</b><br>` : '') +
+      `<small>Fuente: BFE / sonnendach.ch</small>`
+    mapRef.current?.drawSolarRoof(roof.rings, html)
+    setStatus(null)
+  }
+
+  // Verificación de cobertura: lee el GPS EXIF de las fotos del vuelo y las
+  // pinta sobre el mapa con su huella aproximada.
+  async function onCoverageFiles(e) {
+    const files = [...(e.target.files ?? [])]
+    if (!files.length) return
+    setStatus(`Leyendo ${files.length} fotos…`)
+    const metas = []
+    let noGPS = 0
+    for (const f of files) {
+      const meta = parsePhotoMeta(await f.arrayBuffer())
+      if (meta) metas.push({ ...meta, name: f.name })
+      else noGPS++
+    }
+    if (!metas.length) {
+      setStatus('⚠️ Ninguna foto tiene GPS. ¿Son originales del drone (sin editar)?')
+      e.target.value = ''
+      return
+    }
+    const footprintRadiusFor = (m) => {
+      const alt = m.altAGL ?? 70
+      return ((MINI4PRO.sensorWidthMM / 1000) * alt / (MINI4PRO.focalMM / 1000)) / 2
+    }
+    mapRef.current?.showFlightPhotos(metas, footprintRadiusFor)
+    const alts = metas.map((m) => m.altAGL).filter((a) => a != null)
+    const avgAlt = alts.length ? alts.reduce((s, a) => s + a, 0) / alts.length : null
+    setStatus(
+      `📷 ${metas.length} fotos con GPS${noGPS ? ` (${noGPS} sin GPS)` : ''}` +
+      (avgAlt != null ? ` · altura media ${avgAlt.toFixed(0)} m` : '') +
+      ' · revisa que las huellas celestes cubran toda la zona sin huecos.'
+    )
+    e.target.value = ''
   }
 
   // Recalcula la rejilla del plan de vuelo y la dibuja en el mapa.
@@ -385,6 +444,17 @@ export default function App() {
 
         {tab === 'process' && (
           <section className="block">
+            <label className="block-label">Verificación en campo</label>
+            <label className="filebtn">
+              📷 Verificar cobertura del vuelo
+              <input type="file" accept="image/jpeg" multiple hidden onChange={onCoverageFiles} />
+            </label>
+            <p className="hint">
+              Selecciona las fotos recién sacadas: el mapa muestra dónde disparó
+              el drone y su huella — comprueba que no hay huecos <b>antes de
+              irte del sitio</b>.
+            </p>
+
             <label className="block-label">Fotos del vuelo → orto + DSM</label>
             <ProcessPanel
               projectName={current.name}
@@ -431,6 +501,20 @@ export default function App() {
               }}
             >
               🧊 Vista 3D del terreno
+            </button>
+            <button
+              onClick={() => {
+                const res = mapRef.current?.toggleDiffHeatmap()
+                if (res === undefined) {
+                  setStatus('⚠️ Carga el DSM actual y el del vuelo anterior para el mapa de calor.')
+                } else if (res === null) {
+                  setStatus('Mapa de calor retirado.')
+                } else {
+                  setStatus(`🔥 Cambios entre vuelos: de ${res.minDz.toFixed(1)} m (azul, retirado) a +${res.maxDz.toFixed(1)} m (rojo, añadido).`)
+                }
+              }}
+            >
+              🔥 Mapa de calor de cambios
             </button>
 
             <label className="block-label">Interiores / cámara 360°</label>
