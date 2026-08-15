@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView.jsx'
+import Manual from './components/Manual.jsx'
+import GuidedTour from './components/GuidedTour.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
 import GcpEditor from './components/GcpEditor.jsx'
@@ -53,6 +55,36 @@ export default function App() {
   const [weather, setWeather] = useState(null) // condiciones de vuelo
   const [weatherBusy, setWeatherBusy] = useState(false)
   const [intel, setIntel] = useState(null) // radiografía del terreno
+  const [showManual, setShowManual] = useState(false)
+  const [showTour, setShowTour] = useState(false)
+
+  // Primera visita: se abre el manual solo, una única vez.
+  useEffect(() => {
+    if (!localStorage.getItem('workpulse.manual.seen')) {
+      localStorage.setItem('workpulse.manual.seen', '1')
+      setShowManual(true)
+    }
+  }, [])
+
+  // "Probar ahora" del manual: cierra y deja la herramienta real activada.
+  function onManualAction(action) {
+    setShowManual(false)
+    if (action.tool) {
+      setTab('measure')
+      setTool(action.tool)
+      setStatus(`▶️ Herramienta activada. ${TOOLS.find((t) => t.id === action.tool)?.hint ?? ''}`)
+    } else if (action.tab) {
+      setTab(action.tab)
+      setSidebarOpen(true)
+    } else if (action.weather) {
+      setTab('measure')
+      checkWeather()
+    } else if (action.gcp) {
+      setShowGcpEditor(true)
+    } else if (action.href) {
+      window.open(action.href, '_blank')
+    }
+  }
 
   async function checkWeather() {
     const c = mapRef.current?.getCenter()
@@ -500,9 +532,17 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         <header className="brand">
           <h1>Workpulse<span>Drohne</span></h1>
           <p>Medición fotogramétrica · Berna 🇨🇭</p>
+          <div className="help-row">
+            <button className="mini" data-tour="manual" onClick={() => setShowManual(true)}>
+              📖 Manual
+            </button>
+            <button className="mini" onClick={() => { setSidebarOpen(true); setTab('measure'); setShowTour(true) }}>
+              🎓 Tour guiado
+            </button>
+          </div>
         </header>
 
-        <section className="block search-block">
+        <section className="block search-block" data-tour="search">
           <input
             type="text"
             placeholder="🔍 Buscar dirección o lugar en Suiza…"
@@ -518,7 +558,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
           )}
         </section>
 
-        <section className="block">
+        <section className="block" data-tour="project">
           <label className="block-label">Proyecto</label>
           <div className="row">
             <select value={current.id} onChange={(e) => setCurrentId(e.target.value)}>
@@ -530,7 +570,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
           </div>
         </section>
 
-        <nav className="tabs">
+        <nav className="tabs" data-tour="tabs">
           <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>📐 Medir</button>
           <button className={tab === 'process' ? 'active' : ''} onClick={() => setTab('process')}>⚙️ Procesar</button>
         </nav>
@@ -637,7 +677,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
 
         {tab === 'measure' && (
           <>
-            <section className="block">
+            <section className="block" data-tour="tools">
               <label className="block-label">Herramienta</label>
               <div className="tools">
                 {TOOLS.map((t) => (
@@ -664,7 +704,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
             </section>
 
-            <section className="block">
+            <section className="block" data-tour="weather">
               <button onClick={checkWeather} disabled={weatherBusy}>
                 🌤️ {weatherBusy ? 'Consultando…' : '¿Puedo volar ahora aquí?'}
               </button>
@@ -775,7 +815,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </section>
             )}
 
-            <section className="block grow">
+            <section className="block grow" data-tour="lists">
               <label className="block-label">Mediciones ({current.measurements.length})</label>
               <ul className="list">
                 {current.measurements.map((m) => (
@@ -844,7 +884,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </ul>
             </section>
 
-            <section className="block export">
+            <section className="block export" data-tour="export">
               <label className="block-label">Exportar</label>
               <div className="tools">
                 <button onClick={() => exportGeoJSON(current)}>GeoJSON</button>
@@ -868,7 +908,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         )}
       </aside>
 
-      <main className="stage">
+      <main className="stage" data-tour="map">
         <MapView ref={mapRef} tool={tool} onDraw={handleDraw} onStatus={setStatus} />
         {isDrawingTool && (
           <div className="draw-toolbar">
@@ -947,6 +987,10 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         {show3D && (
           <Dsm3DView georaster={mapRef.current.getDSM()} onClose={() => setShow3D(false)} />
         )}
+        {showManual && (
+          <Manual onClose={() => setShowManual(false)} onAction={onManualAction} />
+        )}
+        {showTour && <GuidedTour onClose={() => setShowTour(false)} />}
         {showGcpEditor && (
           <GcpEditor
             gcps={current.gcps}
