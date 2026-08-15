@@ -175,6 +175,13 @@ export const SWISS_OVERLAYS = {
     maxNativeZoom: 17,
     opacity: 0.5,
   },
+  droneRestrictions: {
+    name: '🚫 Restricciones de drones (BAZL)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bazl.einschraenkungen-drohnen/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BAZL/OFAC',
+    maxNativeZoom: 18,
+    opacity: 0.6,
+  },
 }
 
 // Berna, plaza federal — centro por defecto de la app.
