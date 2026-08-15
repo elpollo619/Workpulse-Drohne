@@ -8,7 +8,7 @@ import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
 import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
-import { computeVolume } from './lib/raster.js'
+import { computeVolume, computeVolumeDiff } from './lib/raster.js'
 import { planGrid, downloadMissionKMZ } from './lib/mission.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import {
@@ -30,6 +30,7 @@ const BASE_MODES = [
   { id: 'mean', label: 'Cota media' },
   { id: 'perimeter', label: 'Perímetro (interpolado)' },
   { id: 'swiss', label: '🇨🇭 Terreno oficial swissALTI3D' },
+  { id: 'prev', label: '⏮️ Vuelo anterior (diferencia)' },
 ]
 
 export default function App() {
@@ -188,6 +189,25 @@ export default function App() {
       setStatus('⚠️ Carga primero un DSM (pestaña Procesar o archivo GeoTIFF) para medir volumen.')
       return
     }
+    // Comparación entre vuelos: diferencia DSM actual − DSM anterior.
+    if (baseMode === 'prev') {
+      const dsmPrev = mapRef.current?.getDSMPrev()
+      if (!dsmPrev) {
+        setStatus('⚠️ Carga el DSM del vuelo anterior (pestaña Procesar) para comparar.')
+        return
+      }
+      setStatus('Comparando vuelos…')
+      const result = computeVolumeDiff(dsm, dsmPrev, ring)
+      result.baseModeUsed = 'diff'
+      if (result.coverage < 0.9) {
+        setStatus(`⚠️ Solo el ${(result.coverage * 100).toFixed(0)}% de la zona existe en ambos vuelos — resultado parcial.`)
+      } else {
+        setStatus(null)
+      }
+      addMeasurement('volume', ring, result)
+      return
+    }
+
     let opts = { baseMode }
     if (baseMode === 'swiss') {
       // Terreno oficial como superficie base: volumen = DSM − swissALTI3D.
@@ -279,6 +299,32 @@ export default function App() {
     })
   }
 
+  function backupProject() {
+    const blob = new Blob([JSON.stringify(current, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${current.name.replace(/[^a-zA-Z0-9-_]+/g, '-')}-backup.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function restoreProject(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      const data = JSON.parse(await f.text())
+      if (!data.measurements || !data.points) throw new Error('formato no reconocido')
+      const p = { ...newProject(data.name ? `${data.name} (restaurado)` : 'Restaurado'), ...data, id: crypto.randomUUID() }
+      setProjects((prev) => [...prev, p])
+      setCurrentId(p.id)
+      setStatus(`Proyecto "${p.name}" restaurado con ${p.measurements.length} mediciones.`)
+    } catch (err) {
+      setStatus(`No se pudo restaurar: ${err.message}`)
+    }
+    e.target.value = ''
+  }
+
   function createProject() {
     const name = prompt('Nombre del proyecto:', `Vuelo ${projects.length + 1}`)
     if (!name) return
@@ -354,6 +400,22 @@ export default function App() {
             <label className="filebtn">
               ⛰️ DSM (GeoTIFF)
               <input type="file" accept=".tif,.tiff" onChange={onDSMFile} hidden />
+            </label>
+            <label className="filebtn">
+              ⏮️ DSM del vuelo anterior (comparar)
+              <input
+                type="file" accept=".tif,.tiff" hidden
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  try {
+                    await mapRef.current.loadDSMPrev(await f.arrayBuffer())
+                  } catch (err) {
+                    setStatus('Error al cargar el DSM anterior: ' + err.message)
+                  }
+                  e.target.value = ''
+                }}
+              />
             </label>
             <div className="row small">
               <span>Opacidad orto</span>
@@ -523,9 +585,11 @@ export default function App() {
                             : ''
                         }`}
                         {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
-                        {m.type === 'volume' && `⛰️ ${fmtVolume(m.result.fillM3)}${
-                          m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
-                        }`}
+                        {m.type === 'volume' && (m.result.baseModeUsed === 'diff'
+                          ? `⏮️ Δ ${fmtVolume(m.result.volumeM3)} (＋${fmtVolume(m.result.fillM3)} −${fmtVolume(m.result.cutM3)})`
+                          : `⛰️ ${fmtVolume(m.result.fillM3)}${
+                              m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
+                            }`)}
                       </span>
                       {m.type === 'distance' && m.result.profile && (
                         <ProfileChart profile={m.result.profile} />
@@ -588,6 +652,13 @@ export default function App() {
                 <button onClick={() => openPrintableReport(current) || setStatus('El navegador bloqueó la ventana del informe.')}>
                   🖨️ Informe
                 </button>
+                <button onClick={backupProject} title="Descarga el proyecto completo como archivo JSON">
+                  💾 Copia
+                </button>
+                <label className="filebtn" style={{ flex: 1, padding: '8px 10px' }} title="Restaura un proyecto desde su copia JSON">
+                  📂 Restaurar
+                  <input type="file" accept=".json" hidden onChange={restoreProject} />
+                </label>
               </div>
             </section>
           </>

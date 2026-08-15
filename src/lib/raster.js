@@ -41,6 +41,73 @@ function metersPerDegLon(lat) {
 }
 const METERS_PER_DEG_LAT = 110540
 
+/** Valor del raster en una coordenada WGS84 (vecino más próximo), o null. */
+export function sampleRasterAt(georaster, lng, lat) {
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height, noDataValue } = georaster
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const [x, y] = def ? proj4('EPSG:4326', def, [lng, lat]) : [lng, lat]
+  const c = Math.floor((x - xmin) / pixelWidth)
+  const r = Math.floor((ymax - y) / pixelHeight)
+  if (r < 0 || c < 0 || r >= height || c >= width) return null
+  const z = georaster.values[0][r][c]
+  if (z == null || z === noDataValue || Number.isNaN(z)) return null
+  return z
+}
+
+/**
+ * Diferencia de volumen entre dos vuelos dentro de un polígono:
+ * Σ (z_actual − z_anterior) × área de celda. Positivo = material añadido.
+ *
+ * @param {object} dsmNow   DSM del vuelo actual
+ * @param {object} dsmPrev  DSM del vuelo anterior
+ * @param {Array<[lng,lat]>} ring
+ * @returns {{ volumeM3:number, fillM3:number, cutM3:number,
+ *            cellCount:number, coverage:number }}
+ */
+export function computeVolumeDiff(dsmNow, dsmPrev, ring) {
+  const band = dsmNow.values[0]
+  const noData = dsmNow.noDataValue
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = dsmNow
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+  const poly = turfPolygon([[...ring, ring[0]]])
+
+  let fill = 0
+  let cut = 0
+  let inside = 0
+  let matched = 0
+  for (let r = 0; r < height; r++) {
+    const y = ymax - (r + 0.5) * pixelHeight
+    const row = band[r]
+    for (let c = 0; c < width; c++) {
+      const zNow = row[c]
+      if (zNow == null || zNow === noData || Number.isNaN(zNow)) continue
+      const x = xmin + (c + 0.5) * pixelWidth
+      const [lng, lat] = toLngLat(x, y)
+      if (!booleanPointInPolygon(turfPoint([lng, lat]), poly)) continue
+      inside++
+      const zPrev = sampleRasterAt(dsmPrev, lng, lat)
+      if (zPrev == null) continue
+      matched++
+      const cellArea = isGeographic
+        ? pixelWidth * metersPerDegLon(lat) * pixelHeight * METERS_PER_DEG_LAT
+        : pixelWidth * pixelHeight
+      const dz = zNow - zPrev
+      if (dz >= 0) fill += dz * cellArea
+      else cut += -dz * cellArea
+    }
+  }
+  return {
+    volumeM3: fill - cut,
+    fillM3: fill,
+    cutM3: cut,
+    cellCount: matched,
+    coverage: inside ? matched / inside : 0,
+  }
+}
+
 /**
  * Interpolación IDW (inverso de la distancia al cuadrado) desde muestras
  * {x, y, z} hacia un punto (x, y). Coordenadas en el CRS del raster.

@@ -34,6 +34,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const mapRef = useRef(null)
   const orthoRef = useRef(null)
   const dsmRef = useRef(null) // georaster crudo del DSM
+  const dsmPrevRef = useRef(null) // DSM del vuelo anterior (comparación)
   const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
   const planLayerRef = useRef(null) // FeatureGroup con la rejilla del plan de vuelo
   const toolRef = useRef(tool)
@@ -193,8 +194,17 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       dsmRef.current = georaster
       onStatus?.(`DSM cargado (${georaster.width}×${georaster.height} px). Ya puedes medir volumen y abrir la vista 3D.`)
     },
+    async loadDSMPrev(buffer) {
+      onStatus?.('Cargando DSM del vuelo anterior…')
+      const georaster = await loadGeoRaster(buffer)
+      dsmPrevRef.current = georaster
+      onStatus?.('DSM anterior cargado. Usa el modo de volumen "Vuelo anterior" para comparar.')
+    },
     getDSM() {
       return dsmRef.current
+    },
+    getDSMPrev() {
+      return dsmPrevRef.current
     },
     /** Redibuja todas las mediciones y puntos del proyecto. */
     syncProject(project) {
@@ -205,16 +215,29 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       for (const m of project.measurements) {
         if (m.type === 'distance') {
           const latlngs = m.coords.map(([lng, lat]) => [lat, lng])
+          const short = fmtDistance(m.result?.lengthM)
           L.polyline(latlngs, STYLE.distance)
-            .bindPopup(`📏 ${fmtDistance(m.result?.lengthM)}`)
+            .bindPopup(`📏 ${short}`)
+            .bindTooltip(short, { permanent: true, direction: 'center', className: 'measure-label' })
             .addTo(group)
         } else if (m.type === 'area' || m.type === 'volume') {
           const latlngs = m.coords.map(([lng, lat]) => [lat, lng])
           const style = STYLE[m.type]
+          const isDiff = m.result?.baseModeUsed === 'diff'
+          const short = m.type === 'area'
+            ? fmtArea(m.result?.areaM2)
+            : isDiff
+              ? `Δ ${fmtVolume(m.result?.volumeM3)}`
+              : fmtVolume(m.result?.fillM3)
           const label = m.type === 'area'
-            ? `⬛ ${fmtArea(m.result?.areaM2)}`
-            : `⛰️ ${fmtVolume(m.result?.volumeM3)} (relleno ${fmtVolume(m.result?.fillM3)})`
-          L.polygon(latlngs, style).bindPopup(label).addTo(group)
+            ? `⬛ ${short}`
+            : isDiff
+              ? `⏮️ Diferencia entre vuelos: ${fmtVolume(m.result?.volumeM3)} (＋${fmtVolume(m.result?.fillM3)} / −${fmtVolume(m.result?.cutM3)})`
+              : `⛰️ ${fmtVolume(m.result?.volumeM3)} (relleno ${fmtVolume(m.result?.fillM3)})`
+          L.polygon(latlngs, style)
+            .bindPopup(label)
+            .bindTooltip(short, { permanent: true, direction: 'center', className: 'measure-label' })
+            .addTo(group)
         }
       }
 
