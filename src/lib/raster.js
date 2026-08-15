@@ -109,6 +109,84 @@ export function computeVolumeDiff(dsmNow, dsmPrev, ring) {
 }
 
 /**
+ * Rejilla de diferencias entre dos DSM para pintar un mapa de calor:
+ * rojo = material añadido, azul = retirado, transparente = sin cambio.
+ * Devuelve los píxeles RGBA, dimensiones, límites geográficos y estadísticas.
+ *
+ * @param {object} dsmNow   DSM actual
+ * @param {object} dsmPrev  DSM anterior (se muestrea por coordenada)
+ * @param {number} maxDim   lado máximo de la rejilla (submuestreo)
+ * @param {number} threshold cambio mínimo en m para pintar (def. 0.1)
+ */
+export function buildDiffGrid(dsmNow, dsmPrev, maxDim = 400, threshold = 0.1) {
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = dsmNow
+  const band = dsmNow.values[0]
+  const noData = dsmNow.noDataValue
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+
+  const step = Math.max(1, Math.ceil(Math.max(width, height) / maxDim))
+  const gw = Math.floor(width / step)
+  const gh = Math.floor(height / step)
+
+  // 1ª pasada: diferencias y máximo absoluto.
+  const diffs = new Float32Array(gw * gh).fill(NaN)
+  let maxAbs = 0
+  let minDz = Infinity
+  let maxDz = -Infinity
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      const r = j * step
+      const c = i * step
+      const zNow = band[r][c]
+      if (zNow == null || zNow === noData || Number.isNaN(zNow)) continue
+      const x = xmin + (c + 0.5) * pixelWidth
+      const y = ymax - (r + 0.5) * pixelHeight
+      const [lng, lat] = toLngLat(x, y)
+      const zPrev = sampleRasterAt(dsmPrev, lng, lat)
+      if (zPrev == null) continue
+      const dz = zNow - zPrev
+      diffs[j * gw + i] = dz
+      if (Math.abs(dz) > maxAbs) maxAbs = Math.abs(dz)
+      if (dz < minDz) minDz = dz
+      if (dz > maxDz) maxDz = dz
+    }
+  }
+
+  // 2ª pasada: color divergente (azul=quitar, rojo=añadir).
+  const rgba = new Uint8ClampedArray(gw * gh * 4)
+  for (let k = 0; k < diffs.length; k++) {
+    const dz = diffs[k]
+    if (Number.isNaN(dz) || Math.abs(dz) < threshold) continue
+    const t = Math.min(1, Math.abs(dz) / (maxAbs || 1))
+    const o = k * 4
+    if (dz > 0) {
+      rgba[o] = 239; rgba[o + 1] = 68; rgba[o + 2] = 68
+    } else {
+      rgba[o] = 59; rgba[o + 1] = 130; rgba[o + 2] = 246
+    }
+    rgba[o + 3] = Math.round(60 + 180 * t)
+  }
+
+  // Límites geográficos del raster (esquinas, robusto para UTM).
+  const corners = [
+    toLngLat(xmin, ymax),
+    toLngLat(xmin + width * pixelWidth, ymax),
+    toLngLat(xmin, ymax - height * pixelHeight),
+    toLngLat(xmin + width * pixelWidth, ymax - height * pixelHeight),
+  ]
+  const lngs = corners.map((c) => c[0])
+  const lats = corners.map((c) => c[1])
+  const bounds = [
+    [Math.min(...lats), Math.min(...lngs)],
+    [Math.max(...lats), Math.max(...lngs)],
+  ]
+
+  return { rgba, gw, gh, bounds, minDz, maxDz, maxAbs }
+}
+
+/**
  * Interpolación IDW (inverso de la distancia al cuadrado) desde muestras
  * {x, y, z} hacia un punto (x, y). Coordenadas en el CRS del raster.
  */

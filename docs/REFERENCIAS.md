@@ -93,3 +93,22 @@ toma como referencia — con su licencia, porque condiciona *cómo* se pueden us
 - [awesome-photogrammetry](https://github.com/awesome-photogrammetry/awesome-photogrammetry) (800★)
 - [mikeroyal/Photogrammetry-Guide](https://github.com/mikeroyal/Photogrammetry-Guide) (1.5k★)
 - [OpenDroneMap/ODMdata](https://github.com/OpenDroneMap/ODMdata) (200★) — datasets de ejemplo para probar el pipeline
+
+## Investigación de mercado (agentes, ago-2026)
+
+**Carencias detectadas en apps comerciales** (DroneDeploy 329-599 USD/mes, Pix4D ~4k€/año, WebODM instalación Docker dolorosa, DJI Terra licencia atada al PC):
+sin modo offline, límites de imágenes por plan, GCP de pago, informes rígidos,
+parámetros crípticos. → Nuestra respuesta: web sin instalación, sin límites,
+gratis, informes propios.
+
+**Funciones únicas construidas a partir de la investigación:**
+- 🔥 Mapa de calor de cambios entre vuelos (DroneDeploy lo cobra en tier alto)
+- 📷 Verificación de cobertura en campo vía GPS EXIF (nadie la ofrece standalone)
+- ☀️ Informe solar oficial por techo vía identify de geo.admin.ch
+  (`ch.bfe.solarenergie-eignung-daecher` — datos de sonnendach.ch)
+
+**APIs suizas verificadas pendientes de integrar:**
+- `ch.are.bauzonen` (zonas de construcción, identify)
+- MeteoSwiss OGD (estaciones SwissMetNet cada 10 min, STAC en data.geo.admin.ch)
+- STAC swissALTI3D (descarga directa del MDT 0.5 m de la zona de vuelo)
+- `ch.bafu.*` (aguas subterráneas, peligros naturales como overlays)
