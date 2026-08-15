@@ -115,6 +115,27 @@ const ILLOS = {
       <text x="160" y="164" fill={C.muted} fontSize="10" textAnchor="middle">3 vueltas mirando al edificio: fachadas, ventanas y techo</text>
     </Frame>
   ),
+  fachadas: (
+    <Frame>
+      {/* alzado con cotas */}
+      <rect x="70" y="40" width="150" height="90" fill="none" stroke={C.text} strokeWidth="2" />
+      <path d="M70 40 L145 18 L220 40" fill="none" stroke={C.text} strokeWidth="2" />
+      <rect x="85" y="55" width="24" height="26" fill="none" stroke={C.blue} strokeWidth="1.8" />
+      <rect x="132" y="55" width="24" height="26" fill="none" stroke={C.blue} strokeWidth="1.8" />
+      <rect x="180" y="55" width="24" height="26" fill="none" stroke={C.blue} strokeWidth="1.8" />
+      <rect x="130" y="94" width="28" height="36" fill="none" stroke={C.blue} strokeWidth="1.8" />
+      {/* cotas */}
+      <line x1="70" y1="146" x2="220" y2="146" stroke={C.green} strokeWidth="1" />
+      <line x1="66" y1="150" x2="74" y2="142" stroke={C.green} strokeWidth="1" />
+      <line x1="216" y1="150" x2="224" y2="142" stroke={C.green} strokeWidth="1" />
+      <text x="145" y="142" fill={C.green} fontSize="9" textAnchor="middle">12.40</text>
+      <line x1="52" y1="40" x2="52" y2="130" stroke={C.green} strokeWidth="1" />
+      <text x="46" y="88" fill={C.green} fontSize="9" textAnchor="middle" transform="rotate(-90 46 88)">6.20</text>
+      <rect x="238" y="118" width="66" height="34" fill="none" stroke={C.muted} strokeWidth="1" />
+      <text x="271" y="132" fill={C.muted} fontSize="8" textAnchor="middle">Nordfassade</text>
+      <text x="271" y="144" fill={C.muted} fontSize="8" textAnchor="middle">1:100</text>
+    </Frame>
+  ),
   solar: (
     <Frame>
       <circle cx="258" cy="38" r="14" fill={C.yellow} />
@@ -331,6 +352,18 @@ export const CHAPTERS = [
     ],
     tip: 'Con radio ≤ 20 m consigues 1–3 cm/píxel en fachada — suficiente para medir ventanas y puertas al cm. Para anclar todo con precisión topográfica usa GCP. ArchiCAD: Archivo → Importar → nube de puntos (LAZ/XYZ); Vectorworks: Importar nube de puntos.',
     action: { tool: 'orbit' },
+  },
+  {
+    id: 'fachadas', icon: '🏢', title: 'Planos de fachada',
+    what: 'Convierte una foto frontal de la fachada (del vuelo de órbita 🏠) en un Fassadenplan de arquitecto: alzado acotado a escala 1:50/1:100/1:200 con contorno, ventanas y puertas — exportable como PDF a escala, DXF para ArchiCAD/Vectorworks y SVG.',
+    steps: [
+      'En Medir → 🏢 Planos de fachada → ✏️ nuevo, y carga la foto frontal de la fachada.',
+      '📐 Rectificar: toca las 4 esquinas de un rectángulo real (la propia fachada o una ventana grande) e indica sus medidas — se corrige la perspectiva y la escala queda fijada.',
+      'Traza: ⬛ el contorno (doble clic para cerrar), 🪟 cada ventana/puerta con 2 esquinas, ➖ líneas de detalle. Las cotas aparecen en vivo.',
+      'Exporta: 🖨️ PDF a escala (con cotas de cada hueco, generales y cajetín), 📐 DXF en metros o 🖼️ SVG. El plano queda guardado en el proyecto.',
+    ],
+    tip: 'Marca el rectángulo de rectificación lo más grande posible (la fachada entera) y usa una medida que conozcas con seguridad — de eso depende la precisión de todas las cotas.',
+    action: { facade: true },
   },
   {
     id: 'solar', icon: '☀️', title: 'Techo solar',

@@ -5,6 +5,7 @@ import GuidedTour from './components/GuidedTour.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
 import GcpEditor from './components/GcpEditor.jsx'
+import FacadeEditor from './components/FacadeEditor.jsx'
 import ProfileChart from './components/ProfileChart.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
@@ -52,6 +53,7 @@ export default function App() {
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
   const [showGcpEditor, setShowGcpEditor] = useState(false)
+  const [facadeEditing, setFacadeEditing] = useState(null) // null | 'new' | facade obj
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
   const [orbit, setOrbit] = useState(null) // { center, params, result }
@@ -84,6 +86,9 @@ export default function App() {
       checkWeather()
     } else if (action.gcp) {
       setShowGcpEditor(true)
+    } else if (action.facade) {
+      setTab('measure')
+      setFacadeEditing('new')
     } else if (action.href) {
       window.open(action.href, '_blank')
     }
@@ -980,6 +985,33 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </ul>
 
               <label className="block-label">
+                🏢 Planos de fachada ({(current.facades ?? []).length})
+                <button className="mini" onClick={() => setFacadeEditing('new')}>✏️ nuevo</button>
+              </label>
+              <ul className="list">
+                {(current.facades ?? []).map((f) => (
+                  <li key={f.id}>
+                    <span className="mrow" style={{ cursor: 'pointer' }} onClick={() => setFacadeEditing(f)}>
+                      🏢 {f.name} · {f.elements.filter((e) => e.type === 'rect').length} huecos
+                      {f.metersPerPx ? ' · 📏✅' : ' · sin escala'}
+                    </span>
+                    <button
+                      className="del"
+                      onClick={() => updateCurrent((p) => {
+                        p.facades = (p.facades ?? []).filter((x) => x.id !== f.id)
+                        return p
+                      })}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+                {(current.facades ?? []).length === 0 && (
+                  <li className="muted">Alzados acotados desde fotos de fachada (vuelo 🏠).</li>
+                )}
+              </ul>
+
+              <label className="block-label">
                 Puntos de control GCP ({current.gcps.length})
                 <span>
                   <button className="mini" onClick={addGCP}>+ añadir</button>{' '}
@@ -1109,6 +1141,21 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         )}
         {showManual && (
           <Manual onClose={() => setShowManual(false)} onAction={onManualAction} />
+        )}
+        {facadeEditing && (
+          <FacadeEditor
+            projectName={current.name}
+            facade={facadeEditing === 'new' ? null : facadeEditing}
+            onSave={(f) => {
+              if (!f.elements.length && !f.metersPerPx) return // nada que guardar
+              updateCurrent((p) => {
+                const rest = (p.facades ?? []).filter((x) => x.id !== f.id)
+                p.facades = [...rest, f]
+                return p
+              })
+            }}
+            onClose={() => setFacadeEditing(null)}
+          />
         )}
         {showTour && <GuidedTour onClose={() => setShowTour(false)} />}
         {showGcpEditor && (
