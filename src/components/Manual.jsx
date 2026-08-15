@@ -96,6 +96,25 @@ const ILLOS = {
       <text x="160" y="166" fill={C.muted} fontSize="10" textAnchor="middle">rejilla de fotos con solape → misión KMZ para DJI Fly</text>
     </Frame>
   ),
+  orbita: (
+    <Frame>
+      {/* casa */}
+      <path d="M130 84 L160 62 L190 84 Z" fill={C.yellow} opacity="0.5" stroke={C.yellow} strokeWidth="2" />
+      <rect x="138" y="84" width="44" height="34" fill={C.panel} stroke={C.line} />
+      <rect x="145" y="92" width="9" height="9" fill={C.blue} opacity="0.7" />
+      <rect x="166" y="92" width="9" height="9" fill={C.blue} opacity="0.7" />
+      <rect x="155" y="102" width="10" height="16" fill={C.line} />
+      {/* órbitas a 3 alturas */}
+      <ellipse cx="160" cy="112" rx="92" ry="22" fill="none" stroke={C.yellow} strokeWidth="1.6" strokeDasharray="5 4" />
+      <ellipse cx="160" cy="88" rx="102" ry="25" fill="none" stroke="#fb923c" strokeWidth="1.6" strokeDasharray="5 4" />
+      <ellipse cx="160" cy="62" rx="112" ry="28" fill="none" stroke={C.red} strokeWidth="1.6" strokeDasharray="5 4" />
+      {/* drone */}
+      <circle cx="268" cy="66" r="5" fill={C.green} />
+      <line x1="261" y1="59" x2="275" y2="73" stroke={C.green} strokeWidth="2" />
+      <line x1="275" y1="59" x2="261" y2="73" stroke={C.green} strokeWidth="2" />
+      <text x="160" y="164" fill={C.muted} fontSize="10" textAnchor="middle">3 vueltas mirando al edificio: fachadas, ventanas y techo</text>
+    </Frame>
+  ),
   solar: (
     <Frame>
       <circle cx="258" cy="38" r="14" fill={C.yellow} />
@@ -302,6 +321,18 @@ export const CHAPTERS = [
     action: { tool: 'plan' },
   },
   {
+    id: 'orbita', icon: '🏠', title: 'Casas: fachadas y CAD',
+    what: 'Para modelar una casa entera en ArchiCAD o Vectorworks — techo, fachadas, ventanas, puertas — la rejilla normal no basta: mira solo desde arriba. La misión de órbita vuela 3 círculos alrededor del edificio a distintas alturas, siempre mirando hacia él, y capta cada detalle. Después exportas el resultado a CAD.',
+    steps: [
+      'Elige 🏠 Órbita fachadas y toca el CENTRO del edificio en el mapa.',
+      'Ajusta el radio (que libre árboles y cables), la altura del edificio y las fotos por vuelta; descarga la misión KMZ y vuélala.',
+      'Combínala con una rejilla 🛫 normal de la parcela: fotos de techo + fachadas juntas dan el modelo completo.',
+      'Procesa todo en ⚙️ Procesar (idealmente con 🎯 GCP) y descarga: 🏠 Modelo 3D (OBJ) o ☁️ Nube LAZ para importar en ArchiCAD/Vectorworks, o 🏗️ DXF 3D desde Exportar.',
+    ],
+    tip: 'Con radio ≤ 20 m consigues 1–3 cm/píxel en fachada — suficiente para medir ventanas y puertas al cm. Para anclar todo con precisión topográfica usa GCP. ArchiCAD: Archivo → Importar → nube de puntos (LAZ/XYZ); Vectorworks: Importar nube de puntos.',
+    action: { tool: 'orbit' },
+  },
+  {
     id: 'solar', icon: '☀️', title: 'Techo solar',
     what: 'Informe solar instantáneo de cualquier techo de Suiza con los datos oficiales del catastro solar (sonnendach.ch): aptitud, superficie, orientación, inclinación y producción anual estimada.',
     steps: [
@@ -383,13 +414,14 @@ export const CHAPTERS = [
   },
   {
     id: 'exportar', icon: '💾', title: 'Exportar e informes',
-    what: 'Todo lo que mides sale de la app en formatos estándar: GeoJSON (QGIS/web), KML (Google Earth), GPX (GPS), CSV con coordenadas suizas LV95, lista GCP para ODM, informe imprimible y copia de seguridad completa del proyecto.',
+    what: 'Todo lo que mides sale de la app en formatos estándar: GeoJSON (QGIS/web), KML (Google Earth), GPX (GPS), CSV con coordenadas suizas LV95, lista GCP para ODM, 🏗️ DXF 3D y ☁️ nube XYZ para programas CAD (ArchiCAD, Vectorworks, AutoCAD), informe imprimible y copia de seguridad completa.',
     steps: [
       'En la sección Exportar, pulsa el formato que necesites — se descarga al instante.',
-      '🖨️ Informe abre un documento con todas las mediciones listo para imprimir o guardar como PDF.',
-      '💾 Copia descarga el proyecto entero (JSON); 📂 Restaurar lo recupera en cualquier navegador.',
+      '🏗️ DXF 3D incluye el terreno como malla 3D (si hay DSM cargado), las mediciones como líneas con etiquetas y los puntos, organizados por capas CAD.',
+      '☁️ Nube XYZ exporta el terreno como puntos E/N/Z en LV95 absoluto con precisión de cm.',
+      '🖨️ Informe abre un documento imprimible; 💾 Copia / 📂 Restaurar respaldan el proyecto entero.',
     ],
-    tip: 'Haz una 💾 copia al terminar cada trabajo: el almacenamiento del navegador se puede borrar al limpiar datos.',
+    tip: 'El DXF usa un origen local (nota incluida en el archivo) para que ArchiCAD no proteste por coordenadas lejanas; súmale las constantes E/N para volver a LV95 absoluto.',
     action: null,
   },
   {

@@ -11,7 +11,8 @@ import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from 
 import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
 import { computeVolume, computeVolumeDiff } from './lib/raster.js'
-import { planGrid, downloadMissionKMZ } from './lib/mission.js'
+import { planGrid, planOrbit, downloadMissionKMZ } from './lib/mission.js'
+import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import { fetchNearestLive } from './lib/meteoswiss.js'
 import { fetchSwissTerrainDSM } from './lib/terrain.js'
@@ -29,6 +30,7 @@ const TOOLS = [
   { id: 'volume', label: '⛰️ Volumen', hint: 'Requiere DSM cargado; traza el contorno del acopio' },
   { id: 'point', label: '📍 Punto GPS', hint: 'Clic para registrar coordenadas' },
   { id: 'plan', label: '🛫 Plan de vuelo', hint: 'Dibuja la zona a mapear; se genera la rejilla y la misión KMZ' },
+  { id: 'orbit', label: '🏠 Órbita fachadas', hint: 'Toca el centro del edificio: 3 órbitas a distintas alturas para fachadas, ventanas y techo' },
   { id: 'solar', label: '☀️ Techo solar', hint: 'Toca un techo: informe solar oficial (sonnendach.ch) al instante' },
   { id: 'intel', label: '🧠 Radiografía', hint: 'Toca cualquier punto: dossier oficial completo del sitio en un segundo' },
 ]
@@ -52,6 +54,7 @@ export default function App() {
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
+  const [orbit, setOrbit] = useState(null) // { center, params, result }
   const [weather, setWeather] = useState(null) // condiciones de vuelo
   const [weatherBusy, setWeatherBusy] = useState(false)
   const [intel, setIntel] = useState(null) // radiografía del terreno
@@ -237,6 +240,8 @@ export default function App() {
       await handlePoint(coords)
     } else if (drawTool === 'plan') {
       updatePlan(coords, plan?.params)
+    } else if (drawTool === 'orbit') {
+      updateOrbit(coords, orbit?.params)
     } else if (drawTool === 'solar') {
       await handleSolar(coords)
     } else if (drawTool === 'intel') {
@@ -365,6 +370,57 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
   function clearPlan() {
     setPlan(null)
     mapRef.current?.clearFlightPlan()
+  }
+
+  // Recalcula la misión de órbita alrededor del edificio y la dibuja.
+  function updateOrbit(center, params) {
+    const p = { radius: 15, buildingHeightM: 8, photosPerOrbit: 24, speed: 2.5, ...params }
+    const result = planOrbit(center, p)
+    setOrbit({ center, params: p, result })
+    mapRef.current?.drawOrbit(center, p.radius, result.waypoints)
+  }
+
+  function clearOrbit() {
+    setOrbit(null)
+    mapRef.current?.clearFlightPlan()
+  }
+
+  // 🏗️ Exportación CAD: DXF 3D con terreno (si hay DSM), mediciones y puntos.
+  function exportCAD() {
+    const dsm = mapRef.current?.getDSM()
+    const measurements = current.measurements.map((m) => ({
+      coords: m.coords,
+      closed: m.type !== 'distance',
+      label:
+        m.type === 'distance' ? fmtDistance(m.result?.lengthM)
+        : m.type === 'area' ? fmtArea(m.result?.areaM2)
+        : fmtVolume(m.result?.volumeM3 ?? m.result?.fillM3),
+    }))
+    const points = current.points.map((p) => ({ lng: p.lng, lat: p.lat, elev: p.elev, label: p.label }))
+    if (!dsm && !measurements.length && !points.length) {
+      setStatus('⚠️ No hay nada que exportar: mide algo o carga un DSM/terreno oficial primero.')
+      return
+    }
+    const { faces, origin } = downloadDXF3D(current.name, {
+      dsm, measurements, points, gcps: current.gcps,
+    })
+    setStatus(
+      `🏗️ DXF 3D descargado (${faces ? `terreno de ${faces.toLocaleString('es-CH')} caras, ` : ''}` +
+      `${measurements.length} mediciones, ${points.length + current.gcps.length} puntos). ` +
+      `Origen local E+${origin.e}/N+${origin.n} (nota incluida en el archivo). Se importa en ArchiCAD, Vectorworks, AutoCAD…`
+    )
+  }
+
+  function exportXYZ() {
+    const dsm = mapRef.current?.getDSM()
+    if (!dsm) {
+      setStatus('⚠️ Carga primero un DSM (vuelo procesado o 🏔️ terreno oficial) para exportar la nube XYZ.')
+      return
+    }
+    const res = downloadXYZ(current.name, dsm)
+    setStatus(res
+      ? `☁️ Nube XYZ descargada (${res.points.toLocaleString('es-CH')} puntos, LV95 absoluto, precisión cm).`
+      : '⚠️ No se pudo generar la nube (proyección del DSM no soportada).')
   }
 
   async function handleVolume(ring) {
@@ -815,6 +871,64 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </section>
             )}
 
+            {orbit && (
+              <section className="block plan-panel">
+                <label className="block-label">
+                  🏠 Órbita de fachadas
+                  <button className="mini" onClick={clearOrbit}>✕ quitar</button>
+                </label>
+                <div className="row small">
+                  <span>Radio: <b>{orbit.params.radius} m</b></span>
+                  <input
+                    type="range" min="8" max="40" step="1"
+                    value={orbit.params.radius}
+                    onChange={(e) => updateOrbit(orbit.center, { ...orbit.params, radius: +e.target.value })}
+                  />
+                </div>
+                <div className="row small">
+                  <span>Altura edificio: <b>{orbit.params.buildingHeightM} m</b></span>
+                  <input
+                    type="range" min="3" max="25" step="1"
+                    value={orbit.params.buildingHeightM}
+                    onChange={(e) => updateOrbit(orbit.center, { ...orbit.params, buildingHeightM: +e.target.value })}
+                  />
+                </div>
+                <div className="row small">
+                  <span>Fotos por vuelta: <b>{orbit.params.photosPerOrbit}</b></span>
+                  <input
+                    type="range" min="12" max="36" step="4"
+                    value={orbit.params.photosPerOrbit}
+                    onChange={(e) => updateOrbit(orbit.center, { ...orbit.params, photosPerOrbit: +e.target.value })}
+                  />
+                </div>
+                <div className="plan-stats">
+                  <span>📷 {orbit.result.photoCount} fotos</span>
+                  <span>📏 {orbit.result.gsdCM.toFixed(1)} cm/px en fachada</span>
+                  <span>⏱️ ~{Math.ceil(orbit.result.durationMin)} min</span>
+                </div>
+                <p className="hint">
+                  Niveles: {orbit.result.levels.map((l) => `${l.alt} m (cámara ${l.pitch}°)`).join(' · ')}
+                </p>
+                {orbit.result.tooMany && (
+                  <p className="hint">⚠️ Demasiados waypoints (~180 máx). Baja las fotos por vuelta.</p>
+                )}
+                <button
+                  disabled={orbit.result.tooMany}
+                  onClick={() => downloadMissionKMZ(`${current.name}-orbita`, orbit.result.waypoints, {
+                    altitude: orbit.result.maxAlt, speed: orbit.params.speed,
+                  })}
+                >
+                  💾 Descargar misión órbita (KMZ)
+                </button>
+                <p className="hint">
+                  ⚠️ Comprueba que el radio libra árboles y cables — el drone vuela
+                  el círculo completo a las 3 alturas mirando siempre al edificio.
+                  Con radio ≤ 20 m y GCP consigues detalle de ventanas y puertas
+                  a 1–3 cm/px.
+                </p>
+              </section>
+            )}
+
             <section className="block grow" data-tour="lists">
               <label className="block-label">Mediciones ({current.measurements.length})</label>
               <ul className="list">
@@ -892,6 +1006,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 <button onClick={() => exportKML(current)}>KML</button>
                 <button onClick={() => exportPointsCSV(current)}>CSV puntos</button>
                 <button onClick={() => exportGCP(current)}>Lista GCP</button>
+                <button onClick={exportCAD} title="DXF 3D con terreno, mediciones y puntos — ArchiCAD, Vectorworks, AutoCAD, BricsCAD">
+                  🏗️ DXF 3D (CAD)
+                </button>
+                <button onClick={exportXYZ} title="Nube de puntos XYZ del terreno en LV95 absoluto — ArchiCAD, Vectorworks, CloudCompare">
+                  ☁️ Nube XYZ
+                </button>
                 <button onClick={() => openPrintableReport(current) || setStatus('El navegador bloqueó la ventana del informe.')}>
                   🖨️ Informe
                 </button>
