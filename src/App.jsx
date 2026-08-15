@@ -10,6 +10,7 @@ import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
 import { computeVolume } from './lib/raster.js'
 import { planGrid, downloadMissionKMZ } from './lib/mission.js'
+import { fetchFlightConditions } from './lib/weather.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid,
   searchSwissLocations, wgs84ToLV95, isInSwitzerland,
@@ -42,6 +43,22 @@ export default function App() {
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
+  const [weather, setWeather] = useState(null) // condiciones de vuelo
+  const [weatherBusy, setWeatherBusy] = useState(false)
+
+  async function checkWeather() {
+    const c = mapRef.current?.getCenter()
+    if (!c) return
+    setWeatherBusy(true)
+    setWeather(null)
+    try {
+      setWeather(await fetchFlightConditions(c.lat, c.lng))
+    } catch (err) {
+      setStatus(`No se pudo consultar la meteo: ${err.message}`)
+    } finally {
+      setWeatherBusy(false)
+    }
+  }
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const mapRef = useRef(null)
@@ -392,6 +409,37 @@ export default function App() {
                 </div>
               )}
               <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
+            </section>
+
+            <section className="block">
+              <button onClick={checkWeather} disabled={weatherBusy}>
+                🌤️ {weatherBusy ? 'Consultando…' : '¿Puedo volar ahora aquí?'}
+              </button>
+              {weather && (
+                <div className={`weather-card weather-${weather.verdict.level}`}>
+                  <div className="weather-head">
+                    {weather.verdict.level === 'ok' && '✅ Buenas condiciones'}
+                    {weather.verdict.level === 'warn' && '⚠️ Volable con precaución'}
+                    {weather.verdict.level === 'no' && '❌ No recomendado'}
+                  </div>
+                  <div className="weather-data">
+                    <span>💨 {weather.windMS.toFixed(1)} m/s</span>
+                    <span>💥 rachas {weather.gustMS.toFixed(1)}</span>
+                    <span>🌡️ {weather.tempC.toFixed(0)} °C</span>
+                    <span>☀️ sol {weather.sunElev.toFixed(0)}°</span>
+                  </div>
+                  <ul className="weather-reasons">
+                    {weather.verdict.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                  {weather.windows.length > 0 && (
+                    <p className="hint">📸 Mejores horas hoy para mapear: {weather.windows.join(', ')}</p>
+                  )}
+                  <p className="hint">
+                    Activa la capa 🚫 (control de capas) para ver las zonas de
+                    restricción de drones oficiales (BAZL).
+                  </p>
+                </div>
+              )}
             </section>
 
             {plan && (

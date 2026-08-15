@@ -234,6 +234,10 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     flyTo(lat, lng, zoom = 17) {
       mapRef.current?.flyTo([lat, lng], zoom)
     },
+    getCenter() {
+      const c = mapRef.current?.getCenter()
+      return c ? { lat: c.lat, lng: c.lng } : null
+    },
     /** Deshace el último vértice del dibujo en curso. */
     undoVertex() {
       const map = mapRef.current
