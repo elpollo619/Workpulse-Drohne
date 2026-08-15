@@ -170,19 +170,34 @@ export async function identifyAt(lng, lat, layer, tolerance = 0) {
 /**
  * 🧠 Radiografía del terreno: cruza en paralelo todas las fuentes oficiales
  * para un punto — elevación, restricciones de drones (BAZL), zona de
- * construcción (ARE) y techo solar si lo hay.
+ * construcción (ARE), techo solar, zonas de tranquilidad para la fauna (WRZ)
+ * y paisajes protegidos de importancia nacional (BLN).
  */
 export async function fetchTerrainIntel(lng, lat) {
-  const [height, bazl, bauzone, solar] = await Promise.all([
+  const [height, bazl, bauzone, solar, wrz, bln] = await Promise.all([
     fetchSwissHeight(lng, lat),
     identifyAt(lng, lat, 'ch.bazl.einschraenkungen-drohnen', 0),
     identifyAt(lng, lat, 'ch.are.bauzonen', 5),
     fetchSolarRoof(lng, lat),
+    identifyAt(lng, lat, 'ch.bafu.wrz-wildruhezonen_portal', 5),
+    identifyAt(lng, lat, 'ch.bafu.bundesinventare-bln', 5),
   ])
   const { e, n } = wgs84ToLV95(lng, lat)
   return {
     lat, lng, e, n,
     heightM: height,
+    wildZones: wrz.map((r) => ({
+      name: r.attributes?.wrz_name ?? 'Zona de tranquilidad para la fauna',
+      period: r.attributes?.schutzzeit ?? null,
+      binding: r.attributes?.schutzs_de === 'rechtsverbindlich', // legalmente vinculante
+    })),
+    bln: bln[0]
+      ? {
+          name: bln[0].attributes?.bln_name ?? bln[0].attributes?.label ?? 'Paisaje protegido (BLN)',
+          objNr: bln[0].attributes?.bln_obj ?? null,
+          sheetUrl: bln[0].attributes?.linkurldescription ?? null,
+        }
+      : null,
     droneZones: bazl.map((r) => ({
       name: r.attributes?.zone_name_es ?? r.attributes?.zone_name_en ?? r.attributes?.zone_name_de ?? 'Zona restringida',
       restriction: r.attributes?.zone_restriction_en ?? r.attributes?.zone_restriction_de ?? null,
@@ -290,6 +305,13 @@ export const SWISS_OVERLAYS = {
     attribution: '© BFE/OFEN',
     maxNativeZoom: 18,
     opacity: 0.7,
+  },
+  wildlifeZones: {
+    name: '🦌 Zonas de tranquilidad fauna (BAFU)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bafu.wrz-wildruhezonen_portal/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BAFU/OFEV',
+    maxNativeZoom: 18,
+    opacity: 0.6,
   },
 }
 

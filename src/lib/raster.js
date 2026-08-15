@@ -12,12 +12,14 @@ import proj4module from 'proj4'
 const proj4 = proj4module.default ?? proj4module
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { polygon as turfPolygon, point as turfPoint } from '@turf/helpers'
+import { EPSG_2056 } from './swiss.js'
 
-/** Devuelve una definición proj4 para un código EPSG común (4326, 3857, UTM). */
+/** Devuelve una definición proj4 para un código EPSG común (4326, 3857, UTM, LV95). */
 function proj4defForEPSG(epsg) {
   if (!epsg) return null
   if (epsg === 4326) return 'EPSG:4326'
   if (epsg === 3857) return 'EPSG:3857'
+  if (epsg === 2056) return EPSG_2056 // LV95 — DSM del terreno oficial suizo
   // UTM norte: 326zz  |  UTM sur: 327zz
   if (epsg >= 32601 && epsg <= 32660) {
     const zone = epsg - 32600
@@ -40,6 +42,23 @@ function metersPerDegLon(lat) {
   return 111320 * Math.cos((lat * Math.PI) / 180)
 }
 const METERS_PER_DEG_LAT = 110540
+
+/**
+ * Bounding box del anillo en el CRS del raster: permite descartar celdas de un
+ * vistazo antes del test punto-en-polígono, clave cuando el raster cubre mucho
+ * más que el polígono (p.ej. el terreno oficial de toda la vista del mapa).
+ */
+function ringBBoxInCRS(ring, fromLngLat) {
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity
+  for (const [lng, lat] of ring) {
+    const [x, y] = fromLngLat(lng, lat)
+    if (x < xmin) xmin = x
+    if (x > xmax) xmax = x
+    if (y < ymin) ymin = y
+    if (y > ymax) ymax = y
+  }
+  return { xmin, xmax, ymin, ymax }
+}
 
 /** Valor del raster en una coordenada WGS84 (vecino más próximo), o null. */
 export function sampleRasterAt(georaster, lng, lat) {
@@ -72,7 +91,9 @@ export function computeVolumeDiff(dsmNow, dsmPrev, ring) {
   const isGeographic = projection === 4326 || projection === '4326'
   const def = isGeographic ? null : proj4defForEPSG(Number(projection))
   const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+  const fromLngLat = def ? (lng, lat) => proj4('EPSG:4326', def, [lng, lat]) : (lng, lat) => [lng, lat]
   const poly = turfPolygon([[...ring, ring[0]]])
+  const rb = ringBBoxInCRS(ring, fromLngLat)
 
   let fill = 0
   let cut = 0
@@ -80,11 +101,13 @@ export function computeVolumeDiff(dsmNow, dsmPrev, ring) {
   let matched = 0
   for (let r = 0; r < height; r++) {
     const y = ymax - (r + 0.5) * pixelHeight
+    if (y < rb.ymin || y > rb.ymax) continue
     const row = band[r]
     for (let c = 0; c < width; c++) {
       const zNow = row[c]
       if (zNow == null || zNow === noData || Number.isNaN(zNow)) continue
       const x = xmin + (c + 0.5) * pixelWidth
+      if (x < rb.xmin || x > rb.xmax) continue
       const [lng, lat] = toLngLat(x, y)
       if (!booleanPointInPolygon(turfPoint([lng, lat]), poly)) continue
       inside++
@@ -244,6 +267,7 @@ export function computeVolume(georaster, ring, opts = {}) {
     : (lng, lat) => [lng, lat]
 
   const poly = turfPolygon([[...ring, ring[0]]])
+  const rb = ringBBoxInCRS(ring, fromLngLat)
 
   // 1ª pasada: recolectar cotas dentro del polígono, con posición de celda
   // para poder detectar el borde e interpolar planos base no horizontales.
@@ -255,11 +279,13 @@ export function computeVolume(georaster, ring, opts = {}) {
 
   for (let r = 0; r < height; r++) {
     const y = ymax - (r + 0.5) * pixelHeight
+    if (y < rb.ymin || y > rb.ymax) continue
     const row = band[r]
     for (let c = 0; c < width; c++) {
       const z = row[c]
       if (z == null || z === noData || isNaN(z)) continue
       const x = xmin + (c + 0.5) * pixelWidth
+      if (x < rb.xmin || x > rb.xmax) continue
       const [lng, lat] = toLngLat(x, y)
       if (!booleanPointInPolygon(turfPoint([lng, lat]), poly)) continue
 

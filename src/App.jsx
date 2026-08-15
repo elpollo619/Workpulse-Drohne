@@ -11,6 +11,8 @@ import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } fro
 import { computeVolume, computeVolumeDiff } from './lib/raster.js'
 import { planGrid, downloadMissionKMZ } from './lib/mission.js'
 import { fetchFlightConditions } from './lib/weather.js'
+import { fetchNearestLive } from './lib/meteoswiss.js'
+import { fetchSwissTerrainDSM } from './lib/terrain.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid, fetchSolarRoof,
   fetchTerrainIntel, searchSwissLocations, wgs84ToLV95, isInSwitzerland,
@@ -58,11 +60,42 @@ export default function App() {
     setWeatherBusy(true)
     setWeather(null)
     try {
-      setWeather(await fetchFlightConditions(c.lat, c.lng))
+      // Pronóstico (Open-Meteo) + medición real de la estación SwissMetNet
+      // más cercana, en paralelo. La estación puede fallar sin romper nada.
+      const [forecast, live] = await Promise.all([
+        fetchFlightConditions(c.lat, c.lng),
+        fetchNearestLive(c.lng, c.lat).catch(() => null),
+      ])
+      setWeather({ ...forecast, live })
     } catch (err) {
       setStatus(`No se pudo consultar la meteo: ${err.message}`)
     } finally {
       setWeatherBusy(false)
+    }
+  }
+
+  // 🏔️ Terreno oficial swissALTI3D de la vista actual, como DSM medible
+  // ('dsm') o como base de comparación contra el vuelo ('prev').
+  async function loadOfficialTerrain(target) {
+    const b = mapRef.current?.getBounds()
+    if (!b) return
+    try {
+      const g = await fetchSwissTerrainDSM(b, setStatus)
+      if (target === 'prev') {
+        mapRef.current.setDSMPrevObject(g)
+        setStatus(
+          `🏔️ Terreno oficial cargado como base (${g.tileCount} teja(s), 2 m/px). ` +
+          'Usa el modo de volumen "Vuelo anterior" o el 🔥 mapa de calor para ver qué cambió respecto al terreno oficial.'
+        )
+      } else {
+        mapRef.current.setDSMObject(g)
+        setStatus(
+          `🏔️ Terreno oficial cargado (${g.tileCount} teja(s), 2 m/px, ${g.width}×${g.height} celdas). ` +
+          'Ya puedes medir volúmenes y abrir la vista 3D — sin necesidad de vuelo.'
+        )
+      }
+    } catch (err) {
+      setStatus(`⚠️ ${err.message}`)
     }
   }
   const [query, setQuery] = useState('')
@@ -183,11 +216,12 @@ export default function App() {
   async function handleIntel([lng, lat]) {
     setStatus('🧠 Cruzando todas las fuentes oficiales…')
     try {
-      const [terrain, wx] = await Promise.all([
+      const [terrain, wx, live] = await Promise.all([
         fetchTerrainIntel(lng, lat),
         fetchFlightConditions(lat, lng).catch(() => null),
+        fetchNearestLive(lng, lat).catch(() => null),
       ])
-      setIntel({ ...terrain, weather: wx })
+      setIntel({ ...terrain, weather: wx, live })
       setStatus(null)
     } catch (err) {
       setStatus(`No se pudo completar la radiografía: ${err.message}`)
@@ -208,6 +242,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
 <h2>Drones (BAZL)</h2>${intel.droneZones.length
       ? intel.droneZones.map((z) => `<p class="no">🚫 <b>${esc(z.name)}</b>${z.restriction ? ' — ' + esc(z.restriction) : ''}</p>`).join('')
       : '<p>✅ Sin zonas de restricción registradas en este punto.</p>'}
+<h2>Fauna (BAFU)</h2>${intel.wildZones?.length
+      ? intel.wildZones.map((z) => `<p class="warn">🦌 <b>${esc(z.name)}</b>${z.period ? ' — período de protección: ' + esc(z.period) : ''}${z.binding ? ' (legalmente vinculante)' : ''}</p>`).join('')
+      : '<p>✅ Fuera de zonas de tranquilidad para la fauna.</p>'}
+<h2>Paisaje protegido (BLN)</h2><p>${intel.bln
+      ? `🏞️ <b>${esc(intel.bln.name)}</b>${intel.bln.objNr ? ` (objeto n.º ${intel.bln.objNr})` : ''} — paisaje de importancia nacional: vuela con especial consideración.`
+      : 'Fuera del inventario federal de paisajes (BLN).'}</p>
 <h2>Ordenación del territorio (ARE)</h2><p>${intel.bauzone
       ? `Zona de construcción: <b>${esc(intel.bauzone.tipo)}</b> · ${esc(intel.bauzone.municipio)} (${esc(intel.bauzone.canton)})`
       : 'Fuera de zona de construcción registrada.'}</p>
@@ -216,8 +256,10 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
       : 'Sin techo en el catastro solar en este punto.'}</p>
 <h2>Meteo ahora</h2><p>${w
       ? `${w.verdict.level === 'ok' ? '✅' : w.verdict.level === 'warn' ? '⚠️' : '❌'} viento ${w.windMS.toFixed(1)} m/s · rachas ${w.gustMS.toFixed(1)} · ${w.tempC.toFixed(0)} °C · sol ${w.sunElev.toFixed(0)}°${w.windows.length ? ` · mejores horas: ${w.windows.join(', ')}` : ''}`
-      : 'No disponible.'}</p>
-<footer>Fuentes oficiales: swisstopo (swissALTI3D), BAZL/OFAC, ARE, BFE/sonnendach.ch, Open-Meteo. Informe orientativo; verifica la normativa vigente antes de volar.</footer>
+      : 'No disponible.'}</p>${intel.live
+      ? `<p>📡 Medido por la estación <b>${esc(intel.live.station.name)}</b> (${intel.live.distanceKM.toFixed(0)} km, hace ${intel.live.data.ageMin ?? '?'} min): viento ${intel.live.data.windMS.toFixed(1)} m/s${intel.live.data.gustMS != null ? ` · rachas ${intel.live.data.gustMS.toFixed(1)} m/s` : ''}${intel.live.data.tempC != null ? ` · ${intel.live.data.tempC.toFixed(1)} °C` : ''}</p>`
+      : ''}
+<footer>Fuentes oficiales: swisstopo (swissALTI3D), BAZL/OFAC, ARE, BFE/sonnendach.ch, BAFU/OFEV (fauna y BLN), MeteoSuiza (SwissMetNet), Open-Meteo. Informe orientativo; verifica la normativa vigente antes de volar.</footer>
 <script>window.onload=()=>setTimeout(()=>window.print(),300)</script></body></html>`
     const win = window.open('', '_blank')
     if (win) {
@@ -568,6 +610,20 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               🔥 Mapa de calor de cambios
             </button>
 
+            <label className="block-label">🇨🇭 Terreno oficial — sin volar</label>
+            <button onClick={() => loadOfficialTerrain('dsm')}>
+              🏔️ Cargar terreno oficial (vista actual)
+            </button>
+            <button onClick={() => loadOfficialTerrain('prev')}>
+              🏔️→⏮️ Terreno oficial como base de comparación
+            </button>
+            <p className="hint">
+              swissALTI3D (2 m/px): mide volúmenes, perfiles y 3D en cualquier
+              punto de Suiza <b>sin necesidad de vuelo</b>. O cárgalo como base
+              y compara tu vuelo contra el terreno oficial (🔥 mapa de calor)
+              para ver acopios, edificios o excavaciones nuevas.
+            </p>
+
             <label className="block-label">Interiores / cámara 360°</label>
             <a className="filebtn applink" href="./360/">
               📷 Abrir Workpulse 360 ↗
@@ -625,6 +681,18 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                     <span>🌡️ {weather.tempC.toFixed(0)} °C</span>
                     <span>☀️ sol {weather.sunElev.toFixed(0)}°</span>
                   </div>
+                  {weather.live && (
+                    <p className="hint">
+                      📡 <b>Medido ahora</b> en {weather.live.station.name}{' '}
+                      ({weather.live.distanceKM.toFixed(0)} km
+                      {weather.live.data.ageMin != null && `, hace ${weather.live.data.ageMin} min`}):{' '}
+                      💨 {weather.live.data.windMS.toFixed(1)} m/s
+                      {weather.live.data.gustMS != null && ` · rachas ${weather.live.data.gustMS.toFixed(1)}`}
+                      {weather.live.data.tempC != null && ` · 🌡️ ${weather.live.data.tempC.toFixed(1)} °C`}
+                      {weather.live.data.precipMM10 != null && weather.live.data.precipMM10 > 0 &&
+                        ` · 🌧️ ${weather.live.data.precipMM10.toFixed(1)} mm/10min`}
+                    </p>
+                  )}
                   <ul className="weather-reasons">
                     {weather.verdict.reasons.map((r, i) => <li key={i}>{r}</li>)}
                   </ul>
@@ -835,6 +903,17 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   ))
                 : <span className="intel-ok">✅ Sin restricciones de drones registradas aquí</span>}
             </div>
+            {intel.wildZones?.length > 0 && intel.wildZones.map((z, i) => (
+              <div key={`w${i}`} className="intel-row">
+                <span className="intel-no">🦌 {z.name}{z.period ? ` · protección ${z.period}` : ''}{z.binding ? ' · vinculante' : ''}</span>
+              </div>
+            ))}
+            {intel.bln && (
+              <div className="intel-row">
+                🏞️ Paisaje protegido BLN: {intel.bln.name}
+                {intel.bln.objNr ? ` (n.º ${intel.bln.objNr})` : ''}
+              </div>
+            )}
             <div className="intel-row">
               🏗️ {intel.bauzone
                 ? `${intel.bauzone.tipo ?? 'Zona de construcción'} · ${intel.bauzone.municipio ?? ''} (${intel.bauzone.canton ?? ''})`
@@ -851,6 +930,15 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 {intel.weather.verdict.level === 'ok' ? '✅' : intel.weather.verdict.level === 'warn' ? '⚠️' : '❌'}{' '}
                 💨 {intel.weather.windMS.toFixed(1)} m/s · 🌡️ {intel.weather.tempC.toFixed(0)} °C · ☀️ {intel.weather.sunElev.toFixed(0)}°
                 {intel.weather.windows.length > 0 && ` · mejores horas: ${intel.weather.windows.join(', ')}`}
+              </div>
+            )}
+            {intel.live && (
+              <div className="intel-row">
+                📡 {intel.live.station.name} ({intel.live.distanceKM.toFixed(0)} km
+                {intel.live.data.ageMin != null && `, hace ${intel.live.data.ageMin} min`}):{' '}
+                💨 {intel.live.data.windMS.toFixed(1)} m/s
+                {intel.live.data.gustMS != null && ` · rachas ${intel.live.data.gustMS.toFixed(1)}`}
+                {intel.live.data.tempC != null && ` · ${intel.live.data.tempC.toFixed(1)} °C`}
               </div>
             )}
           </div>

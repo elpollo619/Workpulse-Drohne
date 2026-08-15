@@ -209,6 +209,20 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     getDSMPrev() {
       return dsmPrevRef.current
     },
+    /** Usa un georaster ya construido (p.ej. terreno oficial) como DSM. */
+    setDSMObject(georaster) {
+      dsmRef.current = georaster
+    },
+    /** Ídem como DSM del vuelo anterior (base de comparación). */
+    setDSMPrevObject(georaster) {
+      dsmPrevRef.current = georaster
+    },
+    /** Rectángulo visible actual en WGS84. */
+    getBounds() {
+      const b = mapRef.current?.getBounds()
+      if (!b) return null
+      return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }
+    },
     /**
      * Pinta (o quita) el mapa de calor de cambios entre el DSM actual y el
      * anterior: rojo = material añadido, azul = retirado.
