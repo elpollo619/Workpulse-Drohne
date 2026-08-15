@@ -25,5 +25,6 @@ export function newProject(name) {
     points: [],       // { id, label, lng, lat, elev, note }
     gcps: [],         // { id, name, lng, lat, elev, note }
     gcpMarks: [],     // { id, gcpId, image, x, y }  marca píxel<->terreno en una foto
+    facades: [],      // { id, name, elements, metersPerPx, imgW, imgH }  planos de fachada
   }
 }
