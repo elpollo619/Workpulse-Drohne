@@ -74,7 +74,9 @@ export async function fetchSwissProfile(coords, nbPoints = 200) {
   const geom = JSON.stringify({ type: 'LineString', coordinates: lv95 })
   const url = `https://api3.geo.admin.ch/rest/services/profile.json?geom=${encodeURIComponent(geom)}&sr=2056&nb_points=${nbPoints}`
   try {
-    const res = await fetch(url)
+    // Mismo criterio que fetchSwissHeight: sin cobertura, mejor medir sin
+    // perfil que dejar la medición colgada.
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const data = await res.json()
     return data.map((p) => ({ dist: p.dist, alt: p.alts?.COMB ?? p.alts?.DTM2 ?? null }))
@@ -160,12 +162,71 @@ export async function identifyAt(lng, lat, layer, tolerance = 0) {
     `&mapExtent=${(e - ext).toFixed(0)},${(n - ext).toFixed(0)},${(e + ext).toFixed(0)},${(n + ext).toFixed(0)}` +
     '&imageDisplay=100,100,96&returnGeometry=false'
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? []
   } catch {
     return []
+  }
+}
+
+/**
+ * 📐 Parcela catastral en un punto: polígono real (vía identify con geometría
+ * GeoJSON en LV95), número de parcela y EGRID.
+ */
+export async function fetchParcelAt(lng, lat) {
+  if (!isInSwitzerland(lng, lat)) return null
+  const { e, n } = wgs84ToLV95(lng, lat)
+  const ext = 500
+  const url =
+    'https://api3.geo.admin.ch/rest/services/api/MapServer/identify' +
+    `?geometry=${e.toFixed(1)},${n.toFixed(1)}&geometryType=esriGeometryPoint` +
+    '&layers=all:ch.kantone.cadastralwebmap-farbe&tolerance=0&sr=2056' +
+    `&mapExtent=${(e - ext).toFixed(0)},${(n - ext).toFixed(0)},${(e + ext).toFixed(0)},${(n + ext).toFixed(0)}` +
+    '&imageDisplay=100,100,96&returnGeometry=true&geometryFormat=geojson'
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const data = await res.json()
+    const f = data.results?.[0]
+    if (!f?.geometry?.coordinates) return null
+    // Anillos LV95 → lng/lat.
+    const rings = f.geometry.coordinates.map((ring) =>
+      ring.map(([re, rn]) => {
+        const { lng: rlng, lat: rlat } = lv95ToWGS84(re, rn)
+        return [rlng, rlat]
+      })
+    )
+    return {
+      number: f.properties?.number ?? null,
+      egrid: f.properties?.egris_egrid ?? null,
+      canton: f.properties?.ak ?? null,
+      rings,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 🏘️ Edificio en el registro federal GWR (Gebäude- und Wohnungsregister) en
+ * un punto: dirección, año de construcción, parcela, superficie, plantas…
+ */
+export async function fetchBuildingInfo(lng, lat) {
+  const res = await identifyAt(lng, lat, 'ch.bfs.gebaeude_wohnungs_register', 10)
+  const a = res[0]?.attributes
+  if (!a) return null
+  return {
+    address: a.strname_deinr || null,
+    municipality: a.ggdename || null,
+    egid: a.egid || null,
+    egrid: a.egrid || null,
+    parcel: a.lparz || null,
+    yearBuilt: a.gbauj || null,
+    areaM2: a.garea || null,
+    floors: a.gastw || null,
+    dwellings: a.ganzwhg || null,
   }
 }
 
@@ -176,18 +237,20 @@ export async function identifyAt(lng, lat, layer, tolerance = 0) {
  * y paisajes protegidos de importancia nacional (BLN).
  */
 export async function fetchTerrainIntel(lng, lat) {
-  const [height, bazl, bauzone, solar, wrz, bln] = await Promise.all([
+  const [height, bazl, bauzone, solar, wrz, bln, building] = await Promise.all([
     fetchSwissHeight(lng, lat),
     identifyAt(lng, lat, 'ch.bazl.einschraenkungen-drohnen', 0),
     identifyAt(lng, lat, 'ch.are.bauzonen', 5),
     fetchSolarRoof(lng, lat),
     identifyAt(lng, lat, 'ch.bafu.wrz-wildruhezonen_portal', 5),
     identifyAt(lng, lat, 'ch.bafu.bundesinventare-bln', 5),
+    fetchBuildingInfo(lng, lat).catch(() => null),
   ])
   const { e, n } = wgs84ToLV95(lng, lat)
   return {
     lat, lng, e, n,
     heightM: height,
+    building,
     wildZones: wrz.map((r) => ({
       name: r.attributes?.wrz_name ?? 'Zona de tranquilidad para la fauna',
       period: r.attributes?.schutzzeit ?? null,

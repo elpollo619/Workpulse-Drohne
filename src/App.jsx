@@ -19,8 +19,9 @@ import { fetchNearestLive } from './lib/meteoswiss.js'
 import { fetchSwissTerrainDSM } from './lib/terrain.js'
 import {
   fetchSwissHeight, fetchSwissProfile, fetchSwissHeightGrid, fetchSolarRoof,
-  fetchTerrainIntel, searchSwissLocations, wgs84ToLV95, isInSwitzerland,
+  fetchTerrainIntel, fetchBuildingInfo, fetchParcelAt, searchSwissLocations, wgs84ToLV95, isInSwitzerland,
 } from './lib/swiss.js'
+import { openSitePlanPDF } from './lib/siteplan.js'
 import { parsePhotoMeta } from './lib/exif.js'
 import { MINI4PRO } from './lib/mission.js'
 
@@ -290,6 +291,9 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
 <h2>Paisaje protegido (BLN)</h2><p>${intel.bln
       ? `🏞️ <b>${esc(intel.bln.name)}</b>${intel.bln.objNr ? ` (objeto n.º ${intel.bln.objNr})` : ''} — paisaje de importancia nacional: vuela con especial consideración.`
       : 'Fuera del inventario federal de paisajes (BLN).'}</p>
+<h2>Edificio (registro federal GWR)</h2><p>${intel.building
+      ? `🏘️ <b>${esc(intel.building.address)}</b> · ${esc(intel.building.municipality)}${intel.building.yearBuilt ? ` · construido ${intel.building.yearBuilt}` : ''}${intel.building.parcel ? ` · parcela n.º ${esc(intel.building.parcel)}` : ''}${intel.building.areaM2 ? ` · superficie de planta ${intel.building.areaM2} m²` : ''}${intel.building.floors ? ` · ${intel.building.floors} plantas` : ''}${intel.building.egid ? ` · EGID ${esc(intel.building.egid)}` : ''}`
+      : 'Sin edificio registrado en este punto.'}</p>
 <h2>Ordenación del territorio (ARE)</h2><p>${intel.bauzone
       ? `Zona de construcción: <b>${esc(intel.bauzone.tipo)}</b> · ${esc(intel.bauzone.municipio)} (${esc(intel.bauzone.canton)})`
       : 'Fuera de zona de construcción registrada.'}</p>
@@ -414,6 +418,55 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
       `${measurements.length} mediciones, ${points.length + current.gcps.length} puntos). ` +
       `Origen local E+${origin.e}/N+${origin.n} (nota incluida en el archivo). Se importa en ArchiCAD, Vectorworks, AutoCAD…`
     )
+  }
+
+  // 🗺️ Situationsplan: recuadro = bbox de la geometría del proyecto (o vista
+  // actual acotada), fondo catastral oficial y cajetín con datos GWR.
+  async function exportSitePlan() {
+    // La ventana debe abrirse AHORA (síncrono con el clic) o el navegador la
+    // bloqueará como popup; se rellena cuando el plano esté compuesto.
+    const win = window.open('', '_blank')
+    if (!win) {
+      setStatus('⚠️ El navegador bloqueó la ventana del plano — permite popups para esta página.')
+      return
+    }
+    const geo = [
+      ...current.measurements.flatMap((m) => m.coords),
+      ...current.points.map((p) => [p.lng, p.lat]),
+    ]
+    let bounds
+    if (geo.length >= 2 || (geo.length === 1 && current.points.length)) {
+      const lngs = geo.map((c) => c[0])
+      const lats = geo.map((c) => c[1])
+      const dLng = Math.max(0.0012, (Math.max(...lngs) - Math.min(...lngs)) * 0.25)
+      const dLat = Math.max(0.0008, (Math.max(...lats) - Math.min(...lats)) * 0.25)
+      bounds = {
+        west: Math.min(...lngs) - dLng,
+        east: Math.max(...lngs) + dLng,
+        south: Math.min(...lats) - dLat,
+        north: Math.max(...lats) + dLat,
+      }
+    } else {
+      // Sin geometría: recuadro de ~250 m alrededor del centro del mapa.
+      const c = mapRef.current?.getCenter()
+      if (!c) {
+        win.close()
+        return
+      }
+      bounds = { west: c.lng - 0.0016, east: c.lng + 0.0016, south: c.lat - 0.0011, north: c.lat + 0.0011 }
+    }
+    if (!isInSwitzerland(bounds.west, bounds.south)) {
+      win.close()
+      setStatus('⚠️ El Situationsplan usa el catastro suizo: la zona debe estar en Suiza.')
+      return
+    }
+    const cLng = (bounds.west + bounds.east) / 2
+    const cLat = (bounds.south + bounds.north) / 2
+    const [gwr, parcel] = await Promise.all([
+      fetchBuildingInfo(cLng, cLat).catch(() => null),
+      fetchParcelAt(cLng, cLat).catch(() => null),
+    ])
+    await openSitePlanPDF({ project: current, bounds, gwr, parcel, win, onProgress: setStatus })
   }
 
   function exportXYZ() {
@@ -1044,6 +1097,9 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 <button onClick={exportXYZ} title="Nube de puntos XYZ del terreno en LV95 absoluto — ArchiCAD, Vectorworks, CloudCompare">
                   ☁️ Nube XYZ
                 </button>
+                <button onClick={exportSitePlan} title="Plano de situación a escala (1:200/1:500/1:1000) con fondo del catastro oficial, tus mediciones, norte, barra de escala y datos del edificio (GWR) — para solicitudes de obra">
+                  🗺️ Situationsplan
+                </button>
                 <button onClick={() => openPrintableReport(current) || setStatus('El navegador bloqueó la ventana del informe.')}>
                   🖨️ Informe
                 </button>
@@ -1104,6 +1160,14 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               <div className="intel-row">
                 🏞️ Paisaje protegido BLN: {intel.bln.name}
                 {intel.bln.objNr ? ` (n.º ${intel.bln.objNr})` : ''}
+              </div>
+            )}
+            {intel.building && (
+              <div className="intel-row">
+                🏘️ {intel.building.address ?? 'Edificio'}
+                {intel.building.yearBuilt ? ` · construido ${intel.building.yearBuilt}` : ''}
+                {intel.building.parcel ? ` · parcela ${intel.building.parcel}` : ''}
+                {intel.building.areaM2 ? ` · ${intel.building.areaM2} m²` : ''}
               </div>
             )}
             <div className="intel-row">
