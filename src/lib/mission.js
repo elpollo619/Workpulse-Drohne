@@ -110,6 +110,73 @@ export function planGrid(ring, opts = {}) {
 }
 
 /**
+ * ⛰️ Terrain-follow: adapta la altura de cada waypoint al terreno oficial
+ * para mantener la altura sobre el suelo (y por tanto el GSD) constante.
+ * El Mini 4 Pro interpreta executeHeight relativo al punto de despegue, así
+ * que las alturas se calculan respecto al terreno del PRIMER waypoint —
+ * despega cerca de él.
+ *
+ * @param {Array<[lng,lat]>} waypoints  rejilla de planGrid
+ * @param {Array<{dist:number, alt:number}>} profile  perfil oficial a lo largo
+ *        de la serpentina (fetchSwissProfile(waypoints))
+ * @param {number} agl  altura deseada sobre el terreno en m
+ * @returns {null|{waypoints:Array<{lng,lat,alt}>, terrainMinM:number,
+ *          terrainMaxM:number, rangeM:number, clampedCount:number}}
+ */
+export function applyTerrainFollow(waypoints, profile, agl) {
+  if (!profile?.length || waypoints.length < 2) return null
+  const valid = profile.filter((p) => p.alt != null)
+  if (valid.length < 2) return null
+
+  // Distancia acumulada de cada waypoint a lo largo de la ruta.
+  const lat0 = waypoints[0][1]
+  const kx = metersPerDegLon(lat0)
+  const cum = [0]
+  for (let i = 1; i < waypoints.length; i++) {
+    const dx = (waypoints[i][0] - waypoints[i - 1][0]) * kx
+    const dy = (waypoints[i][1] - waypoints[i - 1][1]) * METERS_PER_DEG_LAT
+    cum.push(cum[i - 1] + Math.hypot(dx, dy))
+  }
+
+  // Terreno interpolado linealmente en el perfil para una distancia dada.
+  const terrainAt = (d) => {
+    if (d <= valid[0].dist) return valid[0].alt
+    for (let i = 1; i < valid.length; i++) {
+      if (d <= valid[i].dist) {
+        const a = valid[i - 1]
+        const b = valid[i]
+        const t = b.dist === a.dist ? 0 : (d - a.dist) / (b.dist - a.dist)
+        return a.alt + t * (b.alt - a.alt)
+      }
+    }
+    return valid[valid.length - 1].alt
+  }
+
+  const terr0 = terrainAt(0)
+  let terrainMin = Infinity
+  let terrainMax = -Infinity
+  let clampedCount = 0
+  const out = waypoints.map((wp, i) => {
+    const t = terrainAt(cum[i])
+    if (t < terrainMin) terrainMin = t
+    if (t > terrainMax) terrainMax = t
+    // Altura relativa al despegue (junto al primer waypoint).
+    let alt = Math.round((agl + (t - terr0)) * 10) / 10
+    const clamped = Math.min(120, Math.max(20, alt))
+    if (clamped !== alt) clampedCount++
+    return { lng: wp[0], lat: wp[1], alt: clamped }
+  })
+
+  return {
+    waypoints: out,
+    terrainMinM: terrainMin,
+    terrainMaxM: terrainMax,
+    rangeM: terrainMax - terrainMin,
+    clampedCount,
+  }
+}
+
+/**
  * 🏠 Misión de órbita para fachadas: círculos a varias alturas alrededor de un
  * edificio, con el drone siempre mirando al centro y el gimbal apuntando a la
  * fachada o al techo según el nivel. Es lo que capta ventanas, puertas y
