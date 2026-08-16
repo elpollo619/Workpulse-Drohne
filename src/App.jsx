@@ -12,7 +12,8 @@ import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from 
 import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
 import { computeVolume, computeVolumeDiff } from './lib/raster.js'
-import { planGrid, planOrbit, downloadMissionKMZ } from './lib/mission.js'
+import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './lib/mission.js'
+import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
 import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import { fetchNearestLive } from './lib/meteoswiss.js'
@@ -58,6 +59,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
   const [orbit, setOrbit] = useState(null) // { center, params, result }
+  const [qa, setQa] = useState(null) // control de calidad del vuelo
   const [weather, setWeather] = useState(null) // condiciones de vuelo
   const [weatherBusy, setWeatherBusy] = useState(false)
   const [intel, setIntel] = useState(null) // radiografía del terreno
@@ -143,6 +145,7 @@ export default function App() {
   const [results, setResults] = useState([])
   const mapRef = useRef(null)
   const searchTimer = useRef(null)
+  const planReqRef = useRef(null) // última petición de terrain-follow en curso
 
   // Buscador de direcciones/lugares suizos (geo.admin.ch), con debounce.
   function onQueryChange(text) {
@@ -340,13 +343,24 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
   async function onCoverageFiles(e) {
     const files = [...(e.target.files ?? [])]
     if (!files.length) return
-    setStatus(`Leyendo ${files.length} fotos…`)
+    setQa(null)
     const metas = []
+    const scores = []
     let noGPS = 0
-    for (const f of files) {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      setStatus(`✅ Analizando foto ${i + 1}/${files.length} (GPS + nitidez)…`)
       const meta = parsePhotoMeta(await f.arrayBuffer())
       if (meta) metas.push({ ...meta, name: f.name })
       else noGPS++
+      // Nitidez: laplaciano sobre miniatura de 512 px.
+      try {
+        const bm = await createImageBitmap(f, { resizeWidth: 512 })
+        scores.push({ name: f.name, score: blurScoreFromBitmap(bm) })
+        bm.close?.()
+      } catch {
+        scores.push({ name: f.name, score: null })
+      }
     }
     if (!metas.length) {
       setStatus('⚠️ Ninguna foto tiene GPS. ¿Son originales del drone (sin editar)?')
@@ -358,22 +372,48 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
       return ((MINI4PRO.sensorWidthMM / 1000) * alt / (MINI4PRO.focalMM / 1000)) / 2
     }
     mapRef.current?.showFlightPhotos(metas, footprintRadiusFor)
-    const alts = metas.map((m) => m.altAGL).filter((a) => a != null)
-    const avgAlt = alts.length ? alts.reduce((s, a) => s + a, 0) / alts.length : null
-    setStatus(
-      `📷 ${metas.length} fotos con GPS${noGPS ? ` (${noGPS} sin GPS)` : ''}` +
-      (avgAlt != null ? ` · altura media ${avgAlt.toFixed(0)} m` : '') +
-      ' · revisa que las huellas celestes cubran toda la zona sin huecos.'
-    )
+    const track = analyzeTrack(metas)
+    const blurry = flagBlurry(scores)
+    setQa({ track, blurry, photoCount: metas.length, noGPS })
+    setStatus(null)
     e.target.value = ''
   }
 
-  // Recalcula la rejilla del plan de vuelo y la dibuja en el mapa.
-  function updatePlan(ring, params) {
-    const p = { altitude: 70, frontOverlap: 0.8, sideOverlap: 0.7, speed: 5, ...params }
+  // Recalcula la rejilla del plan de vuelo y la dibuja en el mapa. Con
+  // terrain-follow activo, el plan se muestra al instante con altura fija y
+  // las alturas por waypoint llegan cuando responde el perfil oficial.
+  async function updatePlan(ring, params) {
+    const p = { altitude: 70, frontOverlap: 0.8, sideOverlap: 0.7, speed: 5, terrain: false, ...params }
     const result = planGrid(ring, p)
     setPlan({ ring, params: p, result })
     mapRef.current?.drawFlightPlan(ring, result.waypoints)
+    if (!p.terrain || result.waypoints.length < 2 || !isInSwitzerland(...result.waypoints[0])) return
+
+    setStatus('⛰️ Consultando el perfil del terreno oficial…')
+    // Solo se descarta una respuesta si llegó DESPUÉS de otra petición más
+    // nueva (deslizadores movidos rápido).
+    const token = Symbol('plan')
+    planReqRef.current = token
+    // Para la URL del perfil solo hacen falta los vértices (las fotos de una
+    // línea recta son colineales); la distancia del camino no cambia.
+    const corners = [result.waypoints[0]]
+    for (let i = 1; i < result.waypoints.length - 1; i++) {
+      const [a, b, c] = [result.waypoints[i - 1], result.waypoints[i], result.waypoints[i + 1]]
+      const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+      if (Math.abs(cross) > 1e-12) corners.push(b)
+    }
+    corners.push(result.waypoints[result.waypoints.length - 1])
+    const profile = await fetchSwissProfile(corners, 200)
+    if (planReqRef.current !== token) return // llegó una petición más nueva
+    const tf = profile ? applyTerrainFollow(result.waypoints, profile, p.altitude) : null
+    if (tf) {
+      const result2 = { ...result, waypoints: tf.waypoints, terrain: tf }
+      setPlan({ ring, params: p, result: result2 })
+      mapRef.current?.drawFlightPlan(ring, tf.waypoints)
+      setStatus(null)
+    } else {
+      setStatus('⚠️ Perfil oficial no disponible — plan con altura fija.')
+    }
   }
 
   function clearPlan() {
@@ -698,9 +738,47 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             </label>
             <p className="hint">
               Selecciona las fotos recién sacadas: el mapa muestra dónde disparó
-              el drone y su huella — comprueba que no hay huecos <b>antes de
-              irte del sitio</b>.
+              el drone, y la app mide el <b>solape real</b>, busca <b>huecos</b> y
+              detecta <b>fotos borrosas</b> — todo <b>antes de irte del sitio</b>.
             </p>
+            {qa && (
+              <div className={`weather-card weather-${qa.track?.level ?? 'warn'}`}>
+                <div className="weather-head">
+                  {(!qa.track || qa.track.level === 'warn') && '⚠️ Revisable antes de procesar'}
+                  {qa.track?.level === 'ok' && '✅ Vuelo apto para procesar'}
+                  {qa.track?.level === 'no' && '❌ Solape insuficiente — repite el vuelo'}
+                </div>
+                {qa.track ? (
+                  <div className="weather-data">
+                    <span>📷 {qa.photoCount} fotos</span>
+                    <span>🔁 solape {Math.round(qa.track.avgOverlap * 100)}%</span>
+                    <span>min {Math.round(qa.track.minOverlap * 100)}%</span>
+                    {qa.track.avgAltM != null && <span>⬆️ {qa.track.avgAltM.toFixed(0)} m</span>}
+                  </div>
+                ) : (
+                  <p className="hint">No se pudo derivar el solape (pocas fotos o sin patrón de rejilla).</p>
+                )}
+                {qa.track?.gaps.length > 0 && (
+                  <ul className="weather-reasons">
+                    {qa.track.gaps.map((g, i) => (
+                      <li key={i}>🕳️ Hueco tras {g.after}: {g.distM.toFixed(0)} m entre fotos ({Math.round(g.overlap * 100)}% solape)</li>
+                    ))}
+                  </ul>
+                )}
+                {qa.blurry.length > 0 && (
+                  <ul className="weather-reasons">
+                    {qa.blurry.slice(0, 6).map((b, i) => (
+                      <li key={i}>😵‍💫 Posible borrosa: {b.name}</li>
+                    ))}
+                    {qa.blurry.length > 6 && <li>… y {qa.blurry.length - 6} más</li>}
+                  </ul>
+                )}
+                {qa.blurry.length === 0 && qa.track && (
+                  <p className="hint">Nitidez uniforme en todas las fotos ✅</p>
+                )}
+                {qa.noGPS > 0 && <p className="hint">⚠️ {qa.noGPS} foto(s) sin GPS excluidas.</p>}
+              </div>
+            )}
 
             <label className="block-label">Fotos del vuelo → orto + DSM</label>
             <ProcessPanel
@@ -899,6 +977,25 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                     onChange={(e) => updatePlan(plan.ring, { ...plan.params, speed: +e.target.value })}
                   />
                 </div>
+                <div className="row small">
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={plan.params.terrain}
+                      onChange={(e) => updatePlan(plan.ring, { ...plan.params, terrain: e.target.checked })}
+                    />
+                    <span>⛰️ Seguir el terreno (GSD constante)</span>
+                  </label>
+                </div>
+                {plan.result.terrain && (
+                  <p className="hint">
+                    ⛰️ Desnivel del terreno: {plan.result.terrain.rangeM.toFixed(0)} m · alturas{' '}
+                    {Math.min(...plan.result.waypoints.map((w) => w.alt)).toFixed(0)}–
+                    {Math.max(...plan.result.waypoints.map((w) => w.alt)).toFixed(0)} m
+                    {plan.result.terrain.clampedCount > 0 && ` · ⚠️ ${plan.result.terrain.clampedCount} waypoints limitados a 20–120 m`}
+                    . <b>Despega junto al primer waypoint</b> (las alturas son relativas a su terreno).
+                  </p>
+                )}
                 <div className="plan-stats">
                   <span>📷 {plan.result.photoCount} fotos</span>
                   <span>📏 GSD {plan.result.gsdCM.toFixed(1)} cm/px</span>
@@ -917,7 +1014,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 )}
                 <button
                   disabled={plan.result.tooMany}
-                  onClick={() => downloadMissionKMZ(current.name, plan.result.waypoints, plan.params)}
+                  onClick={() => downloadMissionKMZ(current.name, plan.result.waypoints, {
+                    ...plan.params,
+                    altitude: plan.result.terrain
+                      ? Math.max(...plan.result.waypoints.map((w) => w.alt))
+                      : plan.params.altitude,
+                  })}
                 >
                   💾 Descargar misión KMZ (DJI Fly)
                 </button>

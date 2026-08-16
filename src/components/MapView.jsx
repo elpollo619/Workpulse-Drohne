@@ -343,13 +343,17 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       L.polygon(ring.map(([lng, lat]) => [lat, lng]), {
         color: '#a78bfa', weight: 2, dashArray: '6 4', fillOpacity: 0.05,
       }).addTo(group)
-      L.polyline(waypoints.map(([lng, lat]) => [lat, lng]), {
+      // Waypoints como [lng,lat] (altura fija) u objetos {lng,lat,alt} (terrain-follow).
+      const norm = waypoints.map((wp) => ({ lng: wp.lng ?? wp[0], lat: wp.lat ?? wp[1], alt: wp.alt }))
+      L.polyline(norm.map((w) => [w.lat, w.lng]), {
         color: '#a78bfa', weight: 2.5,
       }).addTo(group)
-      for (const [lng, lat] of waypoints) {
-        L.circleMarker([lat, lng], {
+      for (const w of norm) {
+        const marker = L.circleMarker([w.lat, w.lng], {
           radius: 3, color: '#a78bfa', fillColor: '#c4b5fd', fillOpacity: 1, weight: 1,
-        }).addTo(group)
+        })
+        if (w.alt != null) marker.bindTooltip(`${w.alt} m`, { direction: 'top' })
+        marker.addTo(group)
       }
     },
     clearFlightPlan() {

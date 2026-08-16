@@ -338,7 +338,7 @@ export const CHAPTERS = [
       'Comprueba el clima con 🌤️ y las restricciones 🚫 antes de volar.',
       '💾 Descarga la misión KMZ y cárgala en el mando (guía completa en docs/PLAN-DE-VUELO.md).',
     ],
-    tip: '80% de solape frontal y 70% lateral es el punto seguro para que el procesado 3D nunca falle. Si supera ~25 min, divide la zona en dos vuelos.',
+    tip: '80% de solape frontal y 70% lateral es el punto seguro para que el procesado 3D nunca falle. En terreno con pendiente activa "⛰️ Seguir el terreno": cada waypoint adapta su altura al terreno oficial, el GSD queda constante y la escala del modelo es uniforme (despega junto al primer waypoint). Si supera ~25 min, divide la zona en dos vuelos.',
     action: { tool: 'plan' },
   },
   {
@@ -414,7 +414,7 @@ export const CHAPTERS = [
     id: 'procesar', icon: '⚙️', title: 'Procesar un vuelo',
     what: 'Convierte las fotos del vuelo en un mapa medible: ortofoto (foto aérea corregida) y DSM (modelo de elevación). El cálculo lo hace OpenDroneMap en un servidor tuyo; la app lo orquesta y carga los resultados.',
     steps: [
-      'Nada más aterrizar: 📷 Verificar cobertura lee el GPS de las fotos y muestra sus huellas — comprueba que no hay huecos antes de irte del sitio.',
+      'Nada más aterrizar: 📷 Verificar cobertura analiza las fotos EN EL SITIO — mide el solape real entre disparos, busca huecos de cobertura y detecta fotos borrosas (✅ apto / ⚠️ revisable / ❌ repite el vuelo) antes de que te vayas.',
       'Sube las fotos en la pestaña ⚙️ Procesar y espera el resultado (o instala el servidor con server/install.sh en un PC).',
       'La ortofoto se superpone al mapa (ajusta su opacidad) y el DSM habilita volúmenes y 3D.',
       'También puedes cargar GeoTIFF a mano si procesas con otro programa.',
