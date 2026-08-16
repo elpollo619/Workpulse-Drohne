@@ -378,6 +378,27 @@ export const SWISS_OVERLAYS = {
     maxNativeZoom: 18,
     opacity: 0.6,
   },
+  runoffHazard: {
+    name: '🌊 Peligro de escorrentía superficial (BAFU)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bafu.gefaehrdungskarte-oberflaechenabfluss/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BAFU/OFEV',
+    maxNativeZoom: 18,
+    opacity: 0.6,
+  },
+  obstacleSurfaces: {
+    name: '✈️ Superficies de obstáculos aeropuertos (BAZL)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bazl.hindernisbegrenzungsflaechen-kataster/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BAZL/OFAC',
+    maxNativeZoom: 18,
+    opacity: 0.6,
+  },
+  solarFacades: {
+    name: '🏢 Potencial solar de fachadas (BFE)',
+    url: 'https://wmts.geo.admin.ch/1.0.0/ch.bfe.solarenergie-eignung-fassaden/default/current/3857/{z}/{x}/{y}.png',
+    attribution: '© BFE/OFEN',
+    maxNativeZoom: 18,
+    opacity: 0.7,
+  },
 }
 
 // Berna, plaza federal — centro por defecto de la app.

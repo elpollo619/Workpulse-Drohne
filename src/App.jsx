@@ -4,6 +4,7 @@ import Manual from './components/Manual.jsx'
 import GuidedTour from './components/GuidedTour.jsx'
 import ProcessPanel from './components/ProcessPanel.jsx'
 import Dsm3DView from './components/Dsm3DView.jsx'
+import Swiss3DView from './components/Swiss3DView.jsx'
 import GcpEditor from './components/GcpEditor.jsx'
 import FacadeEditor from './components/FacadeEditor.jsx'
 import ProfileChart from './components/ProfileChart.jsx'
@@ -54,6 +55,7 @@ export default function App() {
   const [status, setStatus] = useState(null)
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
+  const [swiss3D, setSwiss3D] = useState(null) // centro [lng,lat] del visor Suiza 3D
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [facadeEditing, setFacadeEditing] = useState(null) // null | 'new' | facade obj
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -896,6 +898,24 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
             </section>
 
+            <section className="block">
+              <button
+                onClick={() => {
+                  const c = mapRef.current?.getCenter()
+                  if (!c) return
+                  if (!isInSwitzerland(c.lng, c.lat)) return setStatus('⚠️ Suiza 3D solo cubre Suiza.')
+                  setSwiss3D([c.lng, c.lat])
+                }}
+                title="Todos los edificios oficiales de Suiza en 3D sobre el terreno con ortofoto — mide alturas y distancias antes de volar"
+              >
+                🏙️ Suiza 3D — casas y terreno oficiales
+              </button>
+              <p className="hint">
+                Centra el mapa en la casa y ábrelo: la ves en 3D con su entorno
+                y mides alturas reales — <b>antes de volar</b>.
+              </p>
+            </section>
+
             <section className="block" data-tour="weather">
               <button onClick={checkWeather} disabled={weatherBusy}>
                 🌤️ {weatherBusy ? 'Consultando…' : '¿Puedo volar ahora aquí?'}
@@ -1305,6 +1325,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         {show3D && (
           <Dsm3DView georaster={mapRef.current.getDSM()} onClose={() => setShow3D(false)} />
         )}
+        {swiss3D && <Swiss3DView center={swiss3D} onClose={() => setSwiss3D(null)} />}
         {showManual && (
           <Manual onClose={() => setShowManual(false)} onAction={onManualAction} />
         )}
