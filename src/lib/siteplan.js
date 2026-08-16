@@ -47,11 +47,14 @@ export function scaleBarMeters(scale) {
   return 500
 }
 
+const SWISSIMAGE_URL = (z, x, y) =>
+  `https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${z}/${x}/${y}.jpeg`
+
 /**
- * Descarga y compone el fondo catastral del recuadro (navegador). Si la red
- * falla devuelve null y el plano sale con fondo blanco (uso en campo).
+ * Descarga y compone tiles WMTS de un recuadro en un canvas (navegador).
+ * Devuelve null si la red falla o el recuadro es demasiado grande.
  */
-export async function fetchCadastralBackground(bounds, z = 18, maxTiles = 80) {
+export async function fetchWMTSBackground(bounds, z, urlFn, maxTiles = 80) {
   const tl = lngLatToPixel(bounds.west, bounds.north, z)
   const br = lngLatToPixel(bounds.east, bounds.south, z)
   const tx0 = Math.floor(tl.x / TILE)
@@ -71,7 +74,7 @@ export async function fetchCadastralBackground(bounds, z = 18, maxTiles = 80) {
   for (let tx = tx0; tx <= tx1; tx++) {
     for (let ty = ty0; ty <= ty1; ty++) {
       jobs.push(
-        fetch(CADASTRAL_URL(z, tx, ty), { signal: AbortSignal.timeout(10000) })
+        fetch(urlFn(z, tx, ty), { signal: AbortSignal.timeout(10000) })
           .then((r) => (r.ok ? r.blob() : null))
           .then((b) => (b ? createImageBitmap(b) : null))
           .then((bm) => {
@@ -85,11 +88,23 @@ export async function fetchCadastralBackground(bounds, z = 18, maxTiles = 80) {
   const okCount = (await Promise.all(jobs)).reduce((s, v) => s + v, 0)
   if (!okCount) return null
   return {
+    canvas,
     dataUrl: canvas.toDataURL('image/jpeg', 0.88),
     originPx: { x: tx0 * TILE, y: ty0 * TILE },
     widthPx: canvas.width,
     heightPx: canvas.height,
+    zoom: z,
   }
+}
+
+/** Fondo catastral (Situationsplan). */
+export function fetchCadastralBackground(bounds, z = 18, maxTiles = 80) {
+  return fetchWMTSBackground(bounds, z, CADASTRAL_URL, maxTiles)
+}
+
+/** Ortofoto SWISSIMAGE compuesta (textura del terreno 3D). */
+export function fetchSwissimageBackground(bounds, z = 18, maxTiles = 80) {
+  return fetchWMTSBackground(bounds, z, SWISSIMAGE_URL, maxTiles)
 }
 
 /**

@@ -688,3 +688,12 @@ a.applink {
 .tour-bar { display: flex; justify-content: space-between; align-items: center; }
 .tour-count { color: var(--muted); font-size: 11px; }
 .tour-next { background: var(--accent-2) !important; color: #fff !important; }
+
+/* --- 🏙️ Suiza 3D --- */
+.swiss3d .dsm3d-bar { flex-wrap: wrap; gap: 8px; }
+.swiss3d-info { color: var(--accent); font-size: 13px; font-weight: 600; }
+.swiss3d-msg {
+  position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; font-size: 13px; z-index: 5; max-width: 90%;
+}

@@ -185,6 +185,27 @@ const ILLOS = {
       <text x="180" y="168" fill={C.muted} fontSize="9.5">pronóstico + medición real cada 10 min</text>
     </Frame>
   ),
+  suiza3d: (
+    <Frame>
+      {/* terreno 3D con casas */}
+      <path d="M30 140 L100 100 L180 126 L250 84 L300 118 L300 160 L30 160 Z" fill={C.green} opacity="0.25" stroke={C.green} strokeWidth="1.5" />
+      {/* casas 3D simples */}
+      {[[90, 96], [150, 112], [216, 88]].map(([x, y], i) => (
+        <g key={i}>
+          <rect x={x} y={y - 18} width="26" height="18" fill={C.panel} stroke={C.blue} strokeWidth="1.6" />
+          <path d={`M${x - 2} ${y - 18} L${x + 13} ${y - 30} L${x + 28} ${y - 18} Z`} fill={C.blue} opacity="0.5" stroke={C.blue} strokeWidth="1.6" />
+          <path d={`M${x + 26} ${y - 18} l8 -5 v18 l-8 5 z`} fill={C.line} stroke={C.blue} strokeWidth="1" />
+        </g>
+      ))}
+      {/* medición 3D */}
+      <line x1="103" y1="66" x2="229" y2="58" stroke={C.green} strokeWidth="1.6" strokeDasharray="4 3" />
+      <circle cx="103" cy="66" r="4" fill={C.green} />
+      <circle cx="229" cy="58" r="4" fill={C.green} />
+      <rect x="130" y="40" width="72" height="16" rx="8" fill={C.green} />
+      <text x="166" y="52" fill="#06251b" fontSize="10" fontWeight="700" textAnchor="middle">38.20 m</text>
+      <text x="160" y="172" fill={C.muted} fontSize="9.5" textAnchor="middle">edificios oficiales swissBUILDINGS3D + terreno + ortofoto</text>
+    </Frame>
+  ),
   terreno: (
     <Frame>
       {/* tejas descargándose */}
@@ -398,6 +419,18 @@ export const CHAPTERS = [
     ],
     tip: 'Vuela con sol alto (mediodía) para minimizar sombras: el modelo 3D sale mucho más limpio.',
     action: { weather: true },
+  },
+  {
+    id: 'suiza3d', icon: '🏙️', title: 'Suiza 3D: casas y terreno',
+    what: 'Cualquier casa de Suiza en 3D antes de volar: la app carga los edificios oficiales (swissBUILDINGS3D de swisstopo) sobre el terreno oficial texturizado con la ortofoto, y mides distancias y ALTURAS reales con dos toques — también sobre los tejados.',
+    steps: [
+      'Centra el mapa en la casa o zona y pulsa 🏙️ Suiza 3D.',
+      'Gira con el ratón/dedo, rueda para acercar. Los edificios cargan según te acercas.',
+      'Toca 2 puntos (suelo, tejado, fachada…) y verás distancia 3D, horizontal y diferencia de altura — p. ej. la altura del alero para planear la órbita 🏠.',
+      'Esc o 🗑️ borra las mediciones.',
+    ],
+    tip: 'Úsalo para preparar la misión: mide la altura real del edificio (Δh de suelo a cumbrera) y pon ese valor en el panel de la órbita 🏠 — el vuelo sale perfecto a la primera.',
+    action: null,
   },
   {
     id: 'terreno', icon: '🏔️', title: 'Terreno oficial sin volar',
