@@ -452,6 +452,7 @@ export const CHAPTERS = [
       'En la sección Exportar, pulsa el formato que necesites — se descarga al instante.',
       '🏗️ DXF 3D incluye el terreno como malla 3D (si hay DSM cargado), las mediciones como líneas con etiquetas y los puntos, organizados por capas CAD.',
       '☁️ Nube XYZ exporta el terreno como puntos E/N/Z en LV95 absoluto con precisión de cm.',
+      '🗺️ Situationsplan genera el plano de situación a escala (1:200/1:500/1:1000) con fondo del catastro oficial, tus mediciones en rojo, flecha de norte, barra de escala, coordenadas LV95 y los datos del edificio del registro federal (GWR) en el cajetín — el plano que acompaña una solicitud de obra.',
       '🖨️ Informe abre un documento imprimible; 💾 Copia / 📂 Restaurar respaldan el proyecto entero.',
     ],
     tip: 'El DXF usa un origen local (nota incluida en el archivo) para que ArchiCAD no proteste por coordenadas lejanas; súmale las constantes E/N para volver a LV95 absoluto.',
