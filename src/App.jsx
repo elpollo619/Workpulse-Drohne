@@ -15,6 +15,7 @@ import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } fro
 import { computeVolume, computeVolumeDiff } from './lib/raster.js'
 import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './lib/mission.js'
 import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
+import { t, useLang, setLang } from './lib/i18n.js'
 import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import { fetchNearestLive } from './lib/meteoswiss.js'
@@ -48,6 +49,7 @@ const BASE_MODES = [
 ]
 
 export default function App() {
+  const lang = useLang() // re-renderiza toda la app al cambiar de idioma
   const [projects, setProjects] = useState(() => loadProjects())
   const [currentId, setCurrentId] = useState(() => loadProjects()[0]?.id ?? null)
   const [tool, setTool] = useState('pan')
@@ -687,13 +689,27 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
       <aside className={sidebarOpen ? 'sidebar' : 'sidebar hidden'}>
         <header className="brand">
           <h1>Workpulse<span>Drohne</span></h1>
-          <p>Medición fotogramétrica · Berna 🇨🇭</p>
+          <p>{t('Medición fotogramétrica · Berna 🇨🇭')}</p>
           <div className="help-row">
             <button className="mini" data-tour="manual" onClick={() => setShowManual(true)}>
-              📖 Manual
+              {t('📖 Manual')}
             </button>
             <button className="mini" onClick={() => { setSidebarOpen(true); setTab('measure'); setShowTour(true) }}>
-              🎓 Tour guiado
+              {t('🎓 Tour guiado')}
+            </button>
+            <button
+              className={lang === 'es' ? 'mini lang-active' : 'mini'}
+              onClick={() => setLang('es')}
+              title="Español"
+            >
+              ES
+            </button>
+            <button
+              className={lang === 'de' ? 'mini lang-active' : 'mini'}
+              onClick={() => setLang('de')}
+              title="Deutsch (Schweiz)"
+            >
+              DE
             </button>
           </div>
         </header>
@@ -701,7 +717,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         <section className="block search-block" data-tour="search">
           <input
             type="text"
-            placeholder="🔍 Buscar dirección o lugar en Suiza…"
+            placeholder={t('🔍 Buscar dirección o lugar en Suiza…')}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
           />
@@ -715,7 +731,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         </section>
 
         <section className="block" data-tour="project">
-          <label className="block-label">Proyecto</label>
+          <label className="block-label">{t('Proyecto')}</label>
           <div className="row">
             <select value={current.id} onChange={(e) => setCurrentId(e.target.value)}>
               {projects.map((p) => (
@@ -727,15 +743,15 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         </section>
 
         <nav className="tabs" data-tour="tabs">
-          <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>📐 Medir</button>
-          <button className={tab === 'process' ? 'active' : ''} onClick={() => setTab('process')}>⚙️ Procesar</button>
+          <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>{t('📐 Medir')}</button>
+          <button className={tab === 'process' ? 'active' : ''} onClick={() => setTab('process')}>{t('⚙️ Procesar')}</button>
         </nav>
 
         {tab === 'process' && (
           <section className="block">
-            <label className="block-label">Verificación en campo</label>
+            <label className="block-label">{t('Verificación en campo')}</label>
             <label className="filebtn">
-              📷 Verificar cobertura del vuelo
+              {t('📷 Verificar cobertura del vuelo')}
               <input type="file" accept="image/jpeg" multiple hidden onChange={onCoverageFiles} />
             </label>
             <p className="hint">
@@ -782,24 +798,24 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </div>
             )}
 
-            <label className="block-label">Fotos del vuelo → orto + DSM</label>
+            <label className="block-label">{t('Fotos del vuelo → orto + DSM')}</label>
             <ProcessPanel
               projectName={current.name}
               onLoadOrtho={(buf) => mapRef.current.loadOrtho(buf)}
               onLoadDSM={(buf) => mapRef.current.loadDSM(buf)}
               onStatus={setStatus}
             />
-            <label className="block-label">O carga GeoTIFF a mano</label>
+            <label className="block-label">{t('O carga GeoTIFF a mano')}</label>
             <label className="filebtn">
-              🗺️ Ortomosaico (GeoTIFF)
+              {t('🗺️ Ortomosaico (GeoTIFF)')}
               <input type="file" accept=".tif,.tiff" onChange={onOrthoFile} hidden />
             </label>
             <label className="filebtn">
-              ⛰️ DSM (GeoTIFF)
+              {t('⛰️ DSM (GeoTIFF)')}
               <input type="file" accept=".tif,.tiff" onChange={onDSMFile} hidden />
             </label>
             <label className="filebtn">
-              ⏮️ DSM del vuelo anterior (comparar)
+              {t('⏮️ DSM del vuelo anterior (comparar)')}
               <input
                 type="file" accept=".tif,.tiff" hidden
                 onChange={async (e) => {
@@ -815,7 +831,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               />
             </label>
             <div className="row small">
-              <span>Opacidad orto</span>
+              <span>{t('Opacidad orto')}</span>
               <input
                 type="range" min="0" max="1" step="0.05" defaultValue="1"
                 onChange={(e) => mapRef.current?.setOrthoOpacity(parseFloat(e.target.value))}
@@ -827,7 +843,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 else setStatus('⚠️ Carga primero un DSM para ver el terreno en 3D.')
               }}
             >
-              🧊 Vista 3D del terreno
+              {t('🧊 Vista 3D del terreno')}
             </button>
             <button
               onClick={() => {
@@ -841,15 +857,15 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 }
               }}
             >
-              🔥 Mapa de calor de cambios
+              {t('🔥 Mapa de calor de cambios')}
             </button>
 
-            <label className="block-label">🇨🇭 Terreno oficial — sin volar</label>
+            <label className="block-label">{t('🇨🇭 Terreno oficial — sin volar')}</label>
             <button onClick={() => loadOfficialTerrain('dsm')}>
-              🏔️ Cargar terreno oficial (vista actual)
+              {t('🏔️ Cargar terreno oficial (vista actual)')}
             </button>
             <button onClick={() => loadOfficialTerrain('prev')}>
-              🏔️→⏮️ Terreno oficial como base de comparación
+              {t('🏔️→⏮️ Terreno oficial como base de comparación')}
             </button>
             <p className="hint">
               swissALTI3D (2 m/px): mide volúmenes, perfiles y 3D en cualquier
@@ -858,13 +874,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               para ver acopios, edificios o excavaciones nuevas.
             </p>
 
-            <label className="block-label">Interiores / cámara 360°</label>
+            <label className="block-label">{t('Interiores / cámara 360°')}</label>
             <a className="filebtn applink" href="./360/">
-              📷 Abrir Workpulse 360 ↗
+              {t('📷 Abrir Workpulse 360 ↗')}
             </a>
             <p className="hint">
-              La medición con cámaras 360° (Insta360) es una app aparte, hecha
-              para espacios interiores.
+              {t('La medición con cámaras 360° (Insta360) es una app aparte, hecha para espacios interiores.')}
             </p>
           </section>
         )}
@@ -872,30 +887,30 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         {tab === 'measure' && (
           <>
             <section className="block" data-tour="tools">
-              <label className="block-label">Herramienta</label>
+              <label className="block-label">{t('Herramienta')}</label>
               <div className="tools">
-                {TOOLS.map((t) => (
+                {TOOLS.map((tl) => (
                   <button
-                    key={t.id}
-                    className={tool === t.id ? 'tool active' : 'tool'}
-                    title={t.hint}
-                    onClick={() => setTool(t.id)}
+                    key={tl.id}
+                    className={tool === tl.id ? 'tool active' : 'tool'}
+                    title={t(tl.hint)}
+                    onClick={() => setTool(tl.id)}
                   >
-                    {t.label}
+                    {t(tl.label)}
                   </button>
                 ))}
               </div>
               {tool === 'volume' && (
                 <div className="row small">
-                  <span>Base</span>
+                  <span>{t('Base')}</span>
                   <select value={baseMode} onChange={(e) => setBaseMode(e.target.value)}>
                     {BASE_MODES.map((b) => (
-                      <option key={b.id} value={b.id}>{b.label}</option>
+                      <option key={b.id} value={b.id}>{t(b.label)}</option>
                     ))}
                   </select>
                 </div>
               )}
-              <p className="hint">{TOOLS.find((t) => t.id === tool)?.hint}</p>
+              <p className="hint">{t(TOOLS.find((tl) => tl.id === tool)?.hint ?? '')}</p>
             </section>
 
             <section className="block">
@@ -908,38 +923,37 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 }}
                 title="Todos los edificios oficiales de Suiza en 3D sobre el terreno con ortofoto — mide alturas y distancias antes de volar"
               >
-                🏙️ Suiza 3D — casas y terreno oficiales
+                {t('🏙️ Suiza 3D — casas y terreno oficiales')}
               </button>
               <p className="hint">
-                Centra el mapa en la casa y ábrelo: la ves en 3D con su entorno
-                y mides alturas reales — <b>antes de volar</b>.
+                {t('Centra el mapa en la casa y ábrelo: la ves en 3D con su entorno y mides alturas reales — antes de volar.')}
               </p>
             </section>
 
             <section className="block" data-tour="weather">
               <button onClick={checkWeather} disabled={weatherBusy}>
-                🌤️ {weatherBusy ? 'Consultando…' : '¿Puedo volar ahora aquí?'}
+                🌤️ {weatherBusy ? t('Consultando…') : t('¿Puedo volar ahora aquí?')}
               </button>
               {weather && (
                 <div className={`weather-card weather-${weather.verdict.level}`}>
                   <div className="weather-head">
-                    {weather.verdict.level === 'ok' && '✅ Buenas condiciones'}
-                    {weather.verdict.level === 'warn' && '⚠️ Volable con precaución'}
-                    {weather.verdict.level === 'no' && '❌ No recomendado'}
+                    {weather.verdict.level === 'ok' && t('✅ Buenas condiciones')}
+                    {weather.verdict.level === 'warn' && t('⚠️ Volable con precaución')}
+                    {weather.verdict.level === 'no' && t('❌ No recomendado')}
                   </div>
                   <div className="weather-data">
                     <span>💨 {weather.windMS.toFixed(1)} m/s</span>
-                    <span>💥 rachas {weather.gustMS.toFixed(1)}</span>
+                    <span>💥 {t('rachas')} {weather.gustMS.toFixed(1)}</span>
                     <span>🌡️ {weather.tempC.toFixed(0)} °C</span>
-                    <span>☀️ sol {weather.sunElev.toFixed(0)}°</span>
+                    <span>☀️ {t('sol')} {weather.sunElev.toFixed(0)}°</span>
                   </div>
                   {weather.live && (
                     <p className="hint">
-                      📡 <b>Medido ahora</b> en {weather.live.station.name}{' '}
+                      <b>{t('📡 Medido ahora')}</b> · {weather.live.station.name}{' '}
                       ({weather.live.distanceKM.toFixed(0)} km
-                      {weather.live.data.ageMin != null && `, hace ${weather.live.data.ageMin} min`}):{' '}
+                      {weather.live.data.ageMin != null && `, ${t('hace {n} min', { n: weather.live.data.ageMin })}`}):{' '}
                       💨 {weather.live.data.windMS.toFixed(1)} m/s
-                      {weather.live.data.gustMS != null && ` · rachas ${weather.live.data.gustMS.toFixed(1)}`}
+                      {weather.live.data.gustMS != null && ` · ${t('rachas')} ${weather.live.data.gustMS.toFixed(1)}`}
                       {weather.live.data.tempC != null && ` · 🌡️ ${weather.live.data.tempC.toFixed(1)} °C`}
                       {weather.live.data.precipMM10 != null && weather.live.data.precipMM10 > 0 &&
                         ` · 🌧️ ${weather.live.data.precipMM10.toFixed(1)} mm/10min`}
@@ -949,11 +963,10 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                     {weather.verdict.reasons.map((r, i) => <li key={i}>{r}</li>)}
                   </ul>
                   {weather.windows.length > 0 && (
-                    <p className="hint">📸 Mejores horas hoy para mapear: {weather.windows.join(', ')}</p>
+                    <p className="hint">{t('📸 Mejores horas hoy para mapear:')} {weather.windows.join(', ')}</p>
                   )}
                   <p className="hint">
-                    Activa la capa 🚫 (control de capas) para ver las zonas de
-                    restricción de drones oficiales (BAZL).
+                    {t('Activa la capa 🚫 (control de capas) para ver las zonas de restricción de drones oficiales (BAZL).')}
                   </p>
                 </div>
               )}
@@ -962,11 +975,11 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             {plan && (
               <section className="block plan-panel">
                 <label className="block-label">
-                  🛫 Plan de vuelo
-                  <button className="mini" onClick={clearPlan}>✕ quitar</button>
+                  {t('🛫 Plan de vuelo')}
+                  <button className="mini" onClick={clearPlan}>{t('✕ quitar')}</button>
                 </label>
                 <div className="row small">
-                  <span>Altura: <b>{plan.params.altitude} m</b></span>
+                  <span>{t('Altura:')} <b>{plan.params.altitude} m</b></span>
                   <input
                     type="range" min="40" max="120" step="5"
                     value={plan.params.altitude}
@@ -974,7 +987,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="row small">
-                  <span>Solape frontal: <b>{Math.round(plan.params.frontOverlap * 100)}%</b></span>
+                  <span>{t('Solape frontal:')} <b>{Math.round(plan.params.frontOverlap * 100)}%</b></span>
                   <input
                     type="range" min="70" max="90" step="5"
                     value={plan.params.frontOverlap * 100}
@@ -982,7 +995,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="row small">
-                  <span>Solape lateral: <b>{Math.round(plan.params.sideOverlap * 100)}%</b></span>
+                  <span>{t('Solape lateral:')} <b>{Math.round(plan.params.sideOverlap * 100)}%</b></span>
                   <input
                     type="range" min="60" max="85" step="5"
                     value={plan.params.sideOverlap * 100}
@@ -990,7 +1003,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="row small">
-                  <span>Velocidad: <b>{plan.params.speed} m/s</b></span>
+                  <span>{t('Velocidad:')} <b>{plan.params.speed} m/s</b></span>
                   <input
                     type="range" min="2" max="8" step="1"
                     value={plan.params.speed}
@@ -1004,7 +1017,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                       checked={plan.params.terrain}
                       onChange={(e) => updatePlan(plan.ring, { ...plan.params, terrain: e.target.checked })}
                     />
-                    <span>⛰️ Seguir el terreno (GSD constante)</span>
+                    <span>{t('⛰️ Seguir el terreno (GSD constante)')}</span>
                   </label>
                 </div>
                 {plan.result.terrain && (
@@ -1017,20 +1030,19 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   </p>
                 )}
                 <div className="plan-stats">
-                  <span>📷 {plan.result.photoCount} fotos</span>
+                  <span>📷 {plan.result.photoCount} {t('fotos')}</span>
                   <span>📏 GSD {plan.result.gsdCM.toFixed(1)} cm/px</span>
-                  <span>➰ {plan.result.lines} líneas</span>
+                  <span>➰ {plan.result.lines} {t('líneas')}</span>
                   <span>🛣️ {(plan.result.distanceM / 1000).toFixed(2)} km</span>
                   <span>⏱️ ~{Math.ceil(plan.result.durationMin)} min</span>
                 </div>
                 {plan.result.tooMany && (
                   <p className="hint">
-                    ⚠️ Demasiados waypoints para DJI Fly (~180 máx). Sube la altura
-                    o reduce la zona.
+                    {t('⚠️ Demasiados waypoints para DJI Fly (~180 máx). Sube la altura o reduce la zona.')}
                   </p>
                 )}
                 {plan.result.durationMin > 25 && (
-                  <p className="hint">⚠️ Supera una batería (~30 min reales). Divide la zona en dos vuelos.</p>
+                  <p className="hint">{t('⚠️ Supera una batería (~30 min reales). Divide la zona en dos vuelos.')}</p>
                 )}
                 <button
                   disabled={plan.result.tooMany}
@@ -1041,7 +1053,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                       : plan.params.altitude,
                   })}
                 >
-                  💾 Descargar misión KMZ (DJI Fly)
+                  {t('💾 Descargar misión KMZ (DJI Fly)')}
                 </button>
                 <p className="hint">
                   Instálala en el mando reemplazando el archivo de una misión creada
@@ -1054,11 +1066,11 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             {orbit && (
               <section className="block plan-panel">
                 <label className="block-label">
-                  🏠 Órbita de fachadas
-                  <button className="mini" onClick={clearOrbit}>✕ quitar</button>
+                  {t('🏠 Órbita de fachadas')}
+                  <button className="mini" onClick={clearOrbit}>{t('✕ quitar')}</button>
                 </label>
                 <div className="row small">
-                  <span>Radio: <b>{orbit.params.radius} m</b></span>
+                  <span>{t('Radio:')} <b>{orbit.params.radius} m</b></span>
                   <input
                     type="range" min="8" max="40" step="1"
                     value={orbit.params.radius}
@@ -1066,7 +1078,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="row small">
-                  <span>Altura edificio: <b>{orbit.params.buildingHeightM} m</b></span>
+                  <span>{t('Altura edificio:')} <b>{orbit.params.buildingHeightM} m</b></span>
                   <input
                     type="range" min="3" max="25" step="1"
                     value={orbit.params.buildingHeightM}
@@ -1074,7 +1086,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="row small">
-                  <span>Fotos por vuelta: <b>{orbit.params.photosPerOrbit}</b></span>
+                  <span>{t('Fotos por vuelta:')} <b>{orbit.params.photosPerOrbit}</b></span>
                   <input
                     type="range" min="12" max="36" step="4"
                     value={orbit.params.photosPerOrbit}
@@ -1082,8 +1094,8 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   />
                 </div>
                 <div className="plan-stats">
-                  <span>📷 {orbit.result.photoCount} fotos</span>
-                  <span>📏 {orbit.result.gsdCM.toFixed(1)} cm/px en fachada</span>
+                  <span>📷 {orbit.result.photoCount} {t('fotos')}</span>
+                  <span>📏 {orbit.result.gsdCM.toFixed(1)} cm/px {t('en fachada')}</span>
                   <span>⏱️ ~{Math.ceil(orbit.result.durationMin)} min</span>
                 </div>
                 <p className="hint">
@@ -1098,7 +1110,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                     altitude: orbit.result.maxAlt, speed: orbit.params.speed,
                   })}
                 >
-                  💾 Descargar misión órbita (KMZ)
+                  {t('💾 Descargar misión órbita (KMZ)')}
                 </button>
                 <p className="hint">
                   ⚠️ Comprueba que el radio libra árboles y cables — el drone vuela
@@ -1110,7 +1122,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             )}
 
             <section className="block grow" data-tour="lists">
-              <label className="block-label">Mediciones ({current.measurements.length})</label>
+              <label className="block-label">{t('Mediciones')} ({current.measurements.length})</label>
               <ul className="list">
                 {current.measurements.map((m) => (
                   <li key={m.id} className={m.type === 'distance' && m.result.profile ? 'with-chart' : ''}>
@@ -1136,11 +1148,11 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   </li>
                 ))}
                 {current.measurements.length === 0 && (
-                  <li className="muted">Sin mediciones todavía.</li>
+                  <li className="muted">{t('Sin mediciones todavía.')}</li>
                 )}
               </ul>
 
-              <label className="block-label">Puntos GPS ({current.points.length})</label>
+              <label className="block-label">{t('Puntos GPS')} ({current.points.length})</label>
               <ul className="list">
                 {current.points.map((p) => {
                   const lv95 = isInSwitzerland(p.lng, p.lat) ? wgs84ToLV95(p.lng, p.lat) : null
@@ -1156,12 +1168,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                     </li>
                   )
                 })}
-                {current.points.length === 0 && <li className="muted">Sin puntos todavía.</li>}
+                {current.points.length === 0 && <li className="muted">{t('Sin puntos todavía.')}</li>}
               </ul>
 
               <label className="block-label">
-                🏢 Planos de fachada ({(current.facades ?? []).length})
-                <button className="mini" onClick={() => setFacadeEditing('new')}>✏️ nuevo</button>
+                {t('🏢 Planos de fachada')} ({(current.facades ?? []).length})
+                <button className="mini" onClick={() => setFacadeEditing('new')}>{t('✏️ nuevo')}</button>
               </label>
               <ul className="list">
                 {(current.facades ?? []).map((f) => (
@@ -1182,15 +1194,15 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   </li>
                 ))}
                 {(current.facades ?? []).length === 0 && (
-                  <li className="muted">Alzados acotados desde fotos de fachada (vuelo 🏠).</li>
+                  <li className="muted">{t('Alzados acotados desde fotos de fachada (vuelo 🏠).')}</li>
                 )}
               </ul>
 
               <label className="block-label">
-                Puntos de control GCP ({current.gcps.length})
+                {t('Puntos de control GCP')} ({current.gcps.length})
                 <span>
-                  <button className="mini" onClick={addGCP}>+ añadir</button>{' '}
-                  <button className="mini" onClick={() => setShowGcpEditor(true)}>🎯 editor</button>
+                  <button className="mini" onClick={addGCP}>{t('+ añadir')}</button>{' '}
+                  <button className="mini" onClick={() => setShowGcpEditor(true)}>{t('🎯 editor')}</button>
                 </span>
               </label>
               <ul className="list">
@@ -1200,36 +1212,36 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                   </li>
                 ))}
                 {current.gcps.length === 0 && (
-                  <li className="muted">Sin GCP. Necesarios para precisión topográfica.</li>
+                  <li className="muted">{t('Sin GCP. Necesarios para precisión topográfica.')}</li>
                 )}
               </ul>
             </section>
 
             <section className="block export" data-tour="export">
-              <label className="block-label">Exportar</label>
+              <label className="block-label">{t('Exportar')}</label>
               <div className="tools">
                 <button onClick={() => exportGeoJSON(current)}>GeoJSON</button>
                 <button onClick={() => exportGPX(current)}>GPX</button>
                 <button onClick={() => exportKML(current)}>KML</button>
-                <button onClick={() => exportPointsCSV(current)}>CSV puntos</button>
-                <button onClick={() => exportGCP(current)}>Lista GCP</button>
+                <button onClick={() => exportPointsCSV(current)}>{t('CSV puntos')}</button>
+                <button onClick={() => exportGCP(current)}>{t('Lista GCP')}</button>
                 <button onClick={exportCAD} title="DXF 3D con terreno, mediciones y puntos — ArchiCAD, Vectorworks, AutoCAD, BricsCAD">
-                  🏗️ DXF 3D (CAD)
+                  {t('🏗️ DXF 3D (CAD)')}
                 </button>
                 <button onClick={exportXYZ} title="Nube de puntos XYZ del terreno en LV95 absoluto — ArchiCAD, Vectorworks, CloudCompare">
-                  ☁️ Nube XYZ
+                  {t('☁️ Nube XYZ')}
                 </button>
                 <button onClick={exportSitePlan} title="Plano de situación a escala (1:200/1:500/1:1000) con fondo del catastro oficial, tus mediciones, norte, barra de escala y datos del edificio (GWR) — para solicitudes de obra">
-                  🗺️ Situationsplan
+                  {t('🗺️ Situationsplan')}
                 </button>
                 <button onClick={() => openPrintableReport(current) || setStatus('El navegador bloqueó la ventana del informe.')}>
-                  🖨️ Informe
+                  {t('🖨️ Informe')}
                 </button>
                 <button onClick={backupProject} title="Descarga el proyecto completo como archivo JSON">
-                  💾 Copia
+                  {t('💾 Copia')}
                 </button>
                 <label className="filebtn" style={{ flex: 1, padding: '8px 10px' }} title="Restaura un proyecto desde su copia JSON">
-                  📂 Restaurar
+                  {t('📂 Restaurar')}
                   <input type="file" accept=".json" hidden onChange={restoreProject} />
                 </label>
               </div>
@@ -1243,25 +1255,25 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         {isDrawingTool && (
           <div className="draw-toolbar">
             <button onClick={() => mapRef.current?.undoVertex()} title="Deshacer último punto (Retroceso)">
-              ↩️ Deshacer punto
+              {t('↩️ Deshacer punto')}
             </button>
             <button onClick={() => mapRef.current?.finishDraw()} title="Terminar con los puntos puestos (Enter)">
-              ✔️ Terminar
+              {t('✔️ Terminar')}
             </button>
             <button onClick={() => mapRef.current?.cancelDraw(tool)} title="Borrar todo y empezar de nuevo (Esc)">
-              🗑️ Reiniciar
+              {t('🗑️ Reiniciar')}
             </button>
             <button onClick={() => setTool('pan')} title="Salir del modo dibujo">
-              ✕ Salir
+              {t('✕ Salir')}
             </button>
           </div>
         )}
         {intel && (
           <div className="intel-card">
             <div className="intel-head">
-              <b>🧠 Radiografía del terreno</b>
+              <b>{t('🧠 Radiografía del terreno')}</b>
               <span>
-                <button className="mini" onClick={printIntel}>🖨️ PDF</button>{' '}
+                <button className="mini" onClick={printIntel}>{t('🖨️ PDF')}</button>{' '}
                 <button className="mini" onClick={() => setIntel(null)}>✕</button>
               </span>
             </div>
@@ -1271,7 +1283,7 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 ? intel.droneZones.map((z, i) => (
                     <div key={i} className="intel-no">🚫 {z.name}{z.restriction ? ` — ${z.restriction}` : ''}</div>
                   ))
-                : <span className="intel-ok">✅ Sin restricciones de drones registradas aquí</span>}
+                : <span className="intel-ok">{t('✅ Sin restricciones de drones registradas aquí')}</span>}
             </div>
             {intel.wildZones?.length > 0 && intel.wildZones.map((z, i) => (
               <div key={`w${i}`} className="intel-row">
@@ -1287,15 +1299,15 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             {intel.building && (
               <div className="intel-row">
                 🏘️ {intel.building.address ?? 'Edificio'}
-                {intel.building.yearBuilt ? ` · construido ${intel.building.yearBuilt}` : ''}
-                {intel.building.parcel ? ` · parcela ${intel.building.parcel}` : ''}
+                {intel.building.yearBuilt ? ` · ${t('construido')} ${intel.building.yearBuilt}` : ''}
+                {intel.building.parcel ? ` · ${t('parcela')} ${intel.building.parcel}` : ''}
                 {intel.building.areaM2 ? ` · ${intel.building.areaM2} m²` : ''}
               </div>
             )}
             <div className="intel-row">
               🏗️ {intel.bauzone
                 ? `${intel.bauzone.tipo ?? 'Zona de construcción'} · ${intel.bauzone.municipio ?? ''} (${intel.bauzone.canton ?? ''})`
-                : 'Fuera de zona de construcción registrada'}
+                : t('Fuera de zona de construcción registrada')}
             </div>
             {intel.solar && (
               <div className="intel-row">

@@ -3,6 +3,8 @@
 // pensado para un drone ligero (<250 g) como el DJI Mini 4 Pro.
 
 /** Elevación solar en grados para una posición y fecha (aprox. NOAA, ±1°). */
+import { t } from './i18n.js'
+
 export function sunElevation(lat, lng, date = new Date()) {
   const rad = Math.PI / 180
   const start = Date.UTC(date.getUTCFullYear(), 0, 0)
@@ -34,17 +36,17 @@ export function flightVerdict({ windMS, gustMS, precipMM, tempC, sunElev }) {
   const warn = (msg) => { reasons.push(msg); if (level === 'ok') level = 'warn' }
   const no = (msg) => { reasons.push(msg); level = 'no' }
 
-  if (windMS > WIND_MAX) no(`Viento ${windMS.toFixed(1)} m/s — demasiado para un drone ligero`)
-  else if (windMS > WIND_WARN) warn(`Viento ${windMS.toFixed(1)} m/s — volable con cuidado`)
-  if (gustMS > GUST_MAX) no(`Rachas de ${gustMS.toFixed(1)} m/s`)
-  if (precipMM > 0) no('Está precipitando — los drones no son impermeables')
-  if (tempC < 0) warn(`${tempC.toFixed(0)} °C — la batería rinde menos con frío`)
-  if (tempC > 38) warn(`${tempC.toFixed(0)} °C — riesgo de sobrecalentamiento`)
+  if (windMS > WIND_MAX) no(t('Viento {v} m/s — demasiado para un drone ligero', { v: windMS.toFixed(1) }))
+  else if (windMS > WIND_WARN) warn(t('Viento {v} m/s — volable con cuidado', { v: windMS.toFixed(1) }))
+  if (gustMS > GUST_MAX) no(t('Rachas de {v} m/s', { v: gustMS.toFixed(1) }))
+  if (precipMM > 0) no(t('Está precipitando — los drones no son impermeables'))
+  if (tempC < 0) warn(t('{v} °C — la batería rinde menos con frío', { v: tempC.toFixed(0) }))
+  if (tempC > 38) warn(t('{v} °C — riesgo de sobrecalentamiento', { v: tempC.toFixed(0) }))
   if (sunElev != null) {
-    if (sunElev <= 0) warn('Es de noche — vuelo nocturno con requisitos extra')
-    else if (sunElev < 20) warn(`Sol bajo (${sunElev.toFixed(0)}°) — sombras largas, peor fotogrametría`)
+    if (sunElev <= 0) warn(t('Es de noche — vuelo nocturno con requisitos extra'))
+    else if (sunElev < 20) warn(t('Sol bajo ({v}°) — sombras largas, peor fotogrametría', { v: sunElev.toFixed(0) }))
   }
-  if (!reasons.length) reasons.push('Viento suave, sin lluvia y buena luz')
+  if (!reasons.length) reasons.push(t('Viento suave, sin lluvia y buena luz'))
   return { level, reasons }
 }
 

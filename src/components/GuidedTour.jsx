@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
+import { t, useLang } from '../lib/i18n.js'
 
 // 🎓 Tour guiado: recorre la interfaz REAL resaltando cada elemento con un
 // foco y una tarjeta explicativa. Los objetivos se localizan por atributo
@@ -58,6 +59,7 @@ const STEPS = [
 ]
 
 export default function GuidedTour({ onClose }) {
+  useLang() // re-renderiza al cambiar de idioma
   const [i, setI] = useState(0)
   const [rect, setRect] = useState(null)
   const step = STEPS[i]
@@ -128,15 +130,15 @@ export default function GuidedTour({ onClose }) {
         <div className="tour-dim" />
       )}
       <div className="tour-card" style={cardStyle}>
-        <b>{step.title}</b>
-        <p>{step.text}</p>
+        <b>{t(step.title)}</b>
+        <p>{t(step.text)}</p>
         <div className="tour-bar">
           <span className="tour-count">{i + 1} / {STEPS.length}</span>
           <span>
             {i > 0 && <button className="mini" onClick={() => setI(i - 1)}>← </button>}{' '}
             {i < STEPS.length - 1
-              ? <button className="mini tour-next" onClick={() => setI(i + 1)}>Siguiente →</button>
-              : <button className="mini tour-next" onClick={onClose}>✔️ Terminar</button>}{' '}
+              ? <button className="mini tour-next" onClick={() => setI(i + 1)}>{t('Siguiente →')}</button>
+              : <button className="mini tour-next" onClick={onClose}>{t('✔️ Terminar')}</button>}{' '}
             <button className="mini" onClick={onClose}>✕</button>
           </span>
         </div>

@@ -6,6 +6,8 @@
 // Modelo: elements = [{ type: 'outline'|'rect'|'line', pts: [{x, y}, …] }]
 // con coordenadas en píxeles de imagen (y hacia abajo) y metersPerPx conocido.
 
+import { t } from './i18n.js'
+
 const S = (v) => (Math.round(v * 100) / 100).toString()
 
 /** Bounding box en píxeles de todos los elementos. */
@@ -111,7 +113,7 @@ export function buildFacadeSVG({ facadeName, projectName, elements, metersPerPx,
   parts.push(line(tbX, tbY + 7, tbX + tbW, tbY + 7, 0.2))
   parts.push(txt(tbX + 2, tbY + 5, `${projectName ?? ''}`, 3, 'start'))
   parts.push(txt(tbX + 2, tbY + 12, `${facadeName}`, 3.4, 'start'))
-  parts.push(txt(tbX + 2, tbY + 16.5, `Escala 1:${scale} · ${new Date().toLocaleDateString('es-CH')} · Workpulse Drohne`, 2.2, 'start'))
+  parts.push(txt(tbX + 2, tbY + 16.5, `${t('Escala')} 1:${scale} · ${new Date().toLocaleDateString('es-CH')} · Workpulse Drohne`, 2.2, 'start'))
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${S(widthMM)}mm" height="${S(heightMM)}mm" ` +
