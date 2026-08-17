@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t, useLang } from '../lib/i18n.js'
 
 // 📖 Manual interactivo: un capítulo por herramienta, con ilustración,
 // explicación de para qué sirve, pasos de uso y un botón "Probar ahora" que
@@ -505,6 +506,7 @@ export const CHAPTERS = [
 ]
 
 export default function Manual({ onClose, onAction, initial = 'inicio' }) {
+  useLang() // re-renderiza al cambiar de idioma
   const [chapterId, setChapterId] = useState(initial)
   const idx = CHAPTERS.findIndex((c) => c.id === chapterId)
   const ch = CHAPTERS[idx] ?? CHAPTERS[0]
@@ -513,8 +515,8 @@ export default function Manual({ onClose, onAction, initial = 'inicio' }) {
     <div className="manual" role="dialog" aria-label="Manual de uso">
       <div className="manual-box">
         <header className="manual-head">
-          <b>📖 Manual de Workpulse Drohne</b>
-          <button className="mini" onClick={onClose}>✕ cerrar</button>
+          <b>{t('📖 Manual de Workpulse Drohne')}</b>
+          <button className="mini" onClick={onClose}>{t('✕ cerrar')}</button>
         </header>
         <div className="manual-body">
           <nav className="manual-nav">
@@ -524,30 +526,30 @@ export default function Manual({ onClose, onAction, initial = 'inicio' }) {
                 className={c.id === ch.id ? 'active' : ''}
                 onClick={() => setChapterId(c.id)}
               >
-                {c.icon} <span>{c.title}</span>
+                {c.icon} <span>{t(c.title)}</span>
               </button>
             ))}
           </nav>
           <article className="manual-page">
             {ILLOS[ch.id]}
-            <h2>{ch.icon} {ch.title}</h2>
-            <p className="manual-what">{ch.what}</p>
-            <h3>Cómo se usa</h3>
+            <h2>{ch.icon} {t(ch.title)}</h2>
+            <p className="manual-what">{t(ch.what)}</p>
+            <h3>{t('Cómo se usa')}</h3>
             <ol>
-              {ch.steps.map((s, i) => <li key={i}>{s}</li>)}
+              {ch.steps.map((s, i) => <li key={i}>{t(s)}</li>)}
             </ol>
-            <p className="manual-tip">💡 <b>Consejo:</b> {ch.tip}</p>
+            <p className="manual-tip">{t('💡 Consejo:')} {t(ch.tip)}</p>
             <div className="manual-actions">
               <button disabled={idx === 0} onClick={() => setChapterId(CHAPTERS[idx - 1].id)}>
-                ← Anterior
+                {t('← Anterior')}
               </button>
               {ch.action && (
                 <button className="manual-try" onClick={() => onAction?.(ch.action)}>
-                  ▶️ Probar ahora
+                  {t('▶️ Probar ahora')}
                 </button>
               )}
               <button disabled={idx === CHAPTERS.length - 1} onClick={() => setChapterId(CHAPTERS[idx + 1].id)}>
-                Siguiente →
+                {t('Siguiente →')}
               </button>
             </div>
           </article>

@@ -7,6 +7,7 @@ import { GLTFExtensionsPlugin } from '3d-tiles-renderer/plugins'
 import { fetchSwissTerrainDSM } from '../lib/terrain.js'
 import { lv95ToWGS84, wgs84ToLV95 } from '../lib/swiss.js'
 import { fetchSwissimageBackground, lngLatToPixel } from '../lib/siteplan.js'
+import { t, useLang } from '../lib/i18n.js'
 
 // 🏙️ Suiza 3D: todos los edificios oficiales de Suiza (swissBUILDINGS3D como
 // 3D Tiles de swisstopo, CORS abierto) sobre el terreno oficial swissALTI3D
@@ -35,6 +36,7 @@ function ecefFrom(latDeg, lngDeg, h) {
 }
 
 export default function Swiss3DView({ center, onClose }) {
+  useLang() // re-renderiza al cambiar de idioma
   const mountRef = useRef(null)
   const [msg, setMsg] = useState('🏙️ Cargando edificios y terreno oficiales…')
   const [measure, setMeasure] = useState(null) // { d3, dh, dz }
@@ -261,18 +263,18 @@ export default function Swiss3DView({ center, onClose }) {
   return (
     <div className="dsm3d swiss3d">
       <div className="dsm3d-bar">
-        <b>🏙️ Suiza 3D — edificios y terreno oficiales</b>
+        <b>{t('🏙️ Suiza 3D — edificios y terreno oficiales')}</b>
         <span className="swiss3d-info">
           {measure
             ? <>📏 {measure.d3.toFixed(2)} m · horizontal {measure.dh.toFixed(2)} m · Δh {measure.dz.toFixed(2)} m</>
-            : 'Toca 2 puntos para medir (también sobre edificios) · Esc borra'}
+            : t('Toca 2 puntos para medir (también sobre edificios) · Esc borra')}
         </span>
         <span>
-          <button className="mini" onClick={() => mountRef.current?.clearMeasure?.()}>🗑️ borrar medición</button>{' '}
-          <button className="mini" onClick={onClose}>✕ cerrar</button>
+          <button className="mini" onClick={() => mountRef.current?.clearMeasure?.()}>{t('🗑️ borrar medición')}</button>{' '}
+          <button className="mini" onClick={onClose}>{t('✕ cerrar')}</button>
         </span>
       </div>
-      {msg && <div className="swiss3d-msg">{msg}</div>}
+      {msg && <div className="swiss3d-msg">{t(msg)}</div>}
       <div ref={mountRef} className="dsm3d-canvas" />
     </div>
   )

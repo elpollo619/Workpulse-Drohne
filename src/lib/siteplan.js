@@ -9,6 +9,7 @@
 // incluye cos(lat)), con error < 0.01 % en un sitio de cientos de metros.
 
 import { wgs84ToLV95 } from './swiss.js'
+import { t } from './i18n.js'
 
 const TILE = 256
 const CADASTRAL_URL = (z, x, y) =>
@@ -233,9 +234,9 @@ export function composeSitePlanSVG({ project, bounds, background = null, zoom = 
   parts.push(txt(tbX + 2, tbY + 5, project.name ?? '', 3, 'start'))
   parts.push(txt(tbX + 2, tbY + 10.5, 'Situationsplan', 3.2, 'start'))
   if (gwr) {
-    parts.push(txt(tbX + 2, tbY + 15, `${gwr.address ?? ''}${gwr.parcel ? ` · Parcela ${gwr.parcel}` : ''}${gwr.yearBuilt ? ` · ${gwr.yearBuilt}` : ''}`, 2.1, 'start'))
+    parts.push(txt(tbX + 2, tbY + 15, `${gwr.address ?? ''}${gwr.parcel ? ` · ${t('Parcela')} ${gwr.parcel}` : ''}${gwr.yearBuilt ? ` · ${gwr.yearBuilt}` : ''}`, 2.1, 'start'))
   }
-  parts.push(txt(tbX + 2, tbY + 19, `Escala 1:${sc} · ${new Date().toLocaleDateString('es-CH')} · Fondo: catastro © swisstopo/cantones · Workpulse Drohne`, 1.8, 'start'))
+  parts.push(txt(tbX + 2, tbY + 19, `${t('Escala')} 1:${sc} · ${new Date().toLocaleDateString('es-CH')} · Kataster © swisstopo · Workpulse Drohne`, 1.8, 'start'))
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${S(widthMM)}mm" height="${S(heightMM)}mm" ` +

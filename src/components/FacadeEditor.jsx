@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { rectifyImage } from '../lib/homography.js'
 import { downloadFacadeSVG, downloadFacadeDXF, openFacadePDF, suggestScale, elementsBBox } from '../lib/facade.js'
+import { t, useLang } from '../lib/i18n.js'
 
 // 🏢 Editor de fachadas: foto frontal del drone → rectificar (4 esquinas) →
 // trazar contorno, ventanas/puertas y líneas → plano acotado (PDF a escala,
@@ -20,6 +21,7 @@ const FTOOLS = [
 const FACADE_NAMES = ['Nordfassade', 'Südfassade', 'Ostfassade', 'Westfassade', 'Fachada']
 
 export default function FacadeEditor({ projectName, facade, onSave, onClose }) {
+  useLang() // re-renderiza al cambiar de idioma
   const canvasRef = useRef(null)
   const [bitmap, setBitmap] = useState(null) // foto (original o rectificada)
   const [imgSize, setImgSize] = useState(facade?.imgW ? { w: facade.imgW, h: facade.imgH } : null)
@@ -298,11 +300,11 @@ export default function FacadeEditor({ projectName, facade, onSave, onClose }) {
     <div className="gcp-editor facade-editor">
       <div className="gcp-side">
         <div className="gcp-side-head">
-          <b>🏢 Editor de fachadas</b>
-          <button onClick={() => { save(); onClose() }}>✕ Guardar y cerrar</button>
+          <b>{t('🏢 Editor de fachadas')}</b>
+          <button onClick={() => { save(); onClose() }}>{t('✕ Guardar y cerrar')}</button>
         </div>
 
-        <label className="block-label">Fachada</label>
+        <label className="block-label">{t('Fachada')}</label>
         <div className="row">
           <select value={name} onChange={(e) => setName(e.target.value)}>
             {FACADE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -310,42 +312,42 @@ export default function FacadeEditor({ projectName, facade, onSave, onClose }) {
         </div>
 
         <label className="filebtn">
-          📷 {bitmap ? 'Cambiar foto' : 'Cargar foto de la fachada'}
+          {bitmap ? t('📷 Cambiar foto') : t('📷 Cargar foto de la fachada')}
           <input type="file" accept="image/jpeg,image/png" hidden onChange={onPhoto} />
         </label>
 
-        <label className="block-label">Herramienta</label>
+        <label className="block-label">{t('Herramienta')}</label>
         <div className="tools">
-          {FTOOLS.map((t) => (
+          {FTOOLS.map((tl) => (
             <button
-              key={t.id}
-              className={tool === t.id ? 'tool active' : 'tool'}
-              title={t.hint}
-              onClick={() => { setTool(t.id); setTemp([]); setMsg(t.hint) }}
+              key={tl.id}
+              className={tool === tl.id ? 'tool active' : 'tool'}
+              title={t(tl.hint)}
+              onClick={() => { setTool(tl.id); setTemp([]); setMsg(tl.hint) }}
             >
-              {t.label}
+              {t(tl.label)}
             </button>
           ))}
         </div>
-        <p className="hint">{msg ?? FTOOLS.find((t) => t.id === tool)?.hint}</p>
+        <p className="hint">{t(msg ?? FTOOLS.find((tl) => tl.id === tool)?.hint ?? '')}</p>
 
-        <label className="block-label">Estado</label>
+        <label className="block-label">{t('Estado')}</label>
         <ul className="list">
           <li><span className="mrow">{mpp ? `📏 Escala: ${(mpp * 1000).toFixed(1)} mm/px ✅` : '📏 Sin escala — rectifica o calibra'}</span></li>
           <li><span className="mrow">⬛ Contorno: {elements.some((e) => e.type === 'outline') ? '✅' : '—'}</span></li>
           <li><span className="mrow">🪟 Huecos: {elements.filter((e) => e.type === 'rect').length} · ➖ Líneas: {elements.filter((e) => e.type === 'line').length}</span></li>
         </ul>
 
-        <label className="block-label">Exportar plano</label>
+        <label className="block-label">{t('Exportar plano')}</label>
         <div className="tools">
           <button disabled={!canExport} onClick={() => { const r = openFacadePDF(exportOpts()); if (r) setMsg(`🖨️ Plano 1:${exportOpts().scale} listo para imprimir/guardar PDF.`) }}>
-            🖨️ PDF a escala
+            {t('🖨️ PDF a escala')}
           </button>
           <button disabled={!canExport} onClick={() => downloadFacadeDXF(`${name}`, exportOpts())}>
-            📐 DXF (CAD)
+            {t('📐 DXF (CAD)')}
           </button>
           <button disabled={!canExport} onClick={() => downloadFacadeSVG(`${name}`, exportOpts())}>
-            🖼️ SVG
+            {t('🖼️ SVG')}
           </button>
         </div>
         <p className="hint">
