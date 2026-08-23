@@ -711,3 +711,5 @@ a.applink {
 .inspection-editor select { width: 100%; }
 .ins-pin { display: inline-flex; width: 17px; height: 17px; border-radius: 50%; color: #fff;
   font-weight: 700; font-size: 10px; align-items: center; justify-content: center; }
+
+.intel-sub { font-size: 11px; color: var(--muted); margin-left: 14px; }

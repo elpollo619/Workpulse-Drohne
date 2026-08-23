@@ -420,7 +420,7 @@ export const CHAPTERS = [
   },
   {
     id: 'radiografia', icon: '🧠', title: 'Radiografía del terreno',
-    what: 'Un toque = dossier oficial completo del punto: elevación exacta, zonas de restricción de drones (BAZL), zona de construcción (ARE), techo solar (BFE), zonas de fauna protegida (BAFU), paisajes BLN y el clima con viento medido. Todo cruzado en un segundo.',
+    what: 'Un toque = dossier oficial completo del punto: elevación exacta, zonas de restricción de drones (BAZL), zona de construcción (ARE), edificio (GWR), restricciones legales de la parcela (ÖREB: plan de uso, protección de aguas, ruido, zonas de seguridad aérea), techo solar (BFE), fauna protegida (BAFU), paisajes BLN y el clima con viento medido. Todo cruzado en un segundo.',
     steps: [
       'Elige 🧠 Radiografía y toca cualquier punto de Suiza.',
       'Revisa la tarjeta: 🚫 = restricciones legales de vuelo; 🦌 = fauna con período de protección; 🏞️ = paisaje protegido.',

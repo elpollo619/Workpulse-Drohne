@@ -197,6 +197,7 @@ export const DE = {
   '🖨️ PDF': '🖨️ PDF',
   '✅ Sin restricciones de drones registradas aquí': '✅ Keine Drohnen-Beschränkungen an diesem Punkt registriert',
   'Fuera de zona de construcción registrada': 'Ausserhalb registrierter Bauzone',
+  'Restricciones legales (ÖREB)': 'Rechtliche Beschränkungen (ÖREB)',
   'construido': 'Baujahr',
   'parcela': 'Parzelle',
   'mejores horas:': 'beste Stunden:',
