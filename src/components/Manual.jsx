@@ -264,6 +264,26 @@ const ILLOS = {
       <text x="52" y="162" fill={C.muted} fontSize="10">marca la diana en cada foto → precisión de cm</text>
     </Frame>
   ),
+  inspeccion: (
+    <Frame>
+      {/* foto con anotaciones */}
+      <rect x="30" y="30" width="150" height="110" rx="6" fill={C.panel} stroke={C.muted} />
+      <path d="M55 120 L95 70 L120 95 L150 60 L175 90" fill="none" stroke={C.muted} strokeWidth="1.5" opacity="0.5" />
+      <rect x="88" y="72" width="34" height="26" fill="none" stroke={C.red} strokeWidth="2" />
+      <line x1="150" y1="50" x2="122" y2="78" stroke={C.red} strokeWidth="2" />
+      <path d="M122 78 l9 -3 -3 9 z" fill={C.red} />
+      {/* tarjeta de defecto */}
+      <rect x="196" y="40" width="100" height="92" rx="8" fill={C.panel} stroke={C.line} />
+      <circle cx="208" cy="54" r="7" fill={C.red} />
+      <text x="208" y="58" fill="#fff" fontSize="9" fontWeight="700" textAnchor="middle">1</text>
+      <text x="222" y="57" fill={C.text} fontSize="9.5" fontWeight="700">Grieta</text>
+      <text x="204" y="74" fill={C.red} fontSize="9">● Grave</text>
+      <rect x="204" y="82" width="84" height="1" fill={C.line} />
+      <text x="204" y="98" fill={C.muted} fontSize="8">📍 LV95 2600668</text>
+      <text x="204" y="112" fill={C.muted} fontSize="8">filtración en junta</text>
+      <text x="34" y="160" fill={C.muted} fontSize="9.5">fotos anotadas → mapa de defectos + PDF facturable</text>
+    </Frame>
+  ),
   exportar: (
     <Frame>
       {[
@@ -466,6 +486,18 @@ export const CHAPTERS = [
     ],
     tip: 'Es la herramienta de facturación: "este mes entraron 1 240 m³ de grava" con evidencia visual y números.',
     action: { tab: 'process' },
+  },
+  {
+    id: 'inspeccion', icon: '📋', title: 'Informe de inspección',
+    what: 'Convierte las fotos de un vuelo en un informe PDF facturable: anotas los defectos sobre cada foto (flecha, caja, punto), los clasificas por gravedad y categoría, y la app genera un documento con mapa de defectos numerados, tabla resumen y una ficha por defecto. Ideal para tejados tras granizo, fachadas o daños.',
+    steps: [
+      'En Medir → 📋 Inspecciones → ✏️ nuevo, carga las fotos del vuelo (las geoetiquetadas se sitúan solas en el mapa).',
+      'Abre una foto, marca el defecto con ➡️ flecha, ⬜ caja o ⊙ punto (rueda = zoom).',
+      'Elige la gravedad (Grave/Moderado/Leve), la categoría y escribe una observación; pulsa ➕ Registrar defecto.',
+      '🖨️ Informe PDF genera el documento con el mapa de defectos sobre la ortofoto oficial, la tabla resumen y las fotos anotadas — listo para el cliente.',
+    ],
+    tip: 'Dispara fotos de cerca de cada defecto durante el vuelo (o con la órbita 🏠). Cuantas más fotos geoetiquetadas, mejor sale el mapa de defectos.',
+    action: { inspection: true },
   },
   {
     id: 'gcp', icon: '🎯', title: 'Puntos de control (GCP)',

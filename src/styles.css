@@ -700,3 +700,14 @@ a.applink {
 
 /* Selector de idioma */
 .lang-active { background: var(--accent-2) !important; color: #fff !important; border-color: var(--accent) !important; }
+
+/* --- 📋 Editor de inspección --- */
+.inspection-editor textarea,
+.inspection-editor input[type=text] {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--text); border-radius: 8px; padding: 7px 9px; font-family: inherit; font-size: 13px;
+  resize: vertical;
+}
+.inspection-editor select { width: 100%; }
+.ins-pin { display: inline-flex; width: 17px; height: 17px; border-radius: 50%; color: #fff;
+  font-weight: 700; font-size: 10px; align-items: center; justify-content: center; }
