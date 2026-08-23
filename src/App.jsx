@@ -7,6 +7,7 @@ import Dsm3DView from './components/Dsm3DView.jsx'
 import Swiss3DView from './components/Swiss3DView.jsx'
 import GcpEditor from './components/GcpEditor.jsx'
 import FacadeEditor from './components/FacadeEditor.jsx'
+import InspectionEditor from './components/InspectionEditor.jsx'
 import ProfileChart from './components/ProfileChart.jsx'
 import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
@@ -60,6 +61,7 @@ export default function App() {
   const [swiss3D, setSwiss3D] = useState(null) // centro [lng,lat] del visor Suiza 3D
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [facadeEditing, setFacadeEditing] = useState(null) // null | 'new' | facade obj
+  const [inspectionEditing, setInspectionEditing] = useState(null) // null | 'new' | inspection obj
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [plan, setPlan] = useState(null) // { ring, params, result }
   const [orbit, setOrbit] = useState(null) // { center, params, result }
@@ -96,6 +98,9 @@ export default function App() {
     } else if (action.facade) {
       setTab('measure')
       setFacadeEditing('new')
+    } else if (action.inspection) {
+      setTab('measure')
+      setInspectionEditing('new')
     } else if (action.href) {
       window.open(action.href, '_blank')
     }
@@ -1199,6 +1204,32 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               </ul>
 
               <label className="block-label">
+                {t('📋 Inspecciones')} ({(current.inspections ?? []).length})
+                <button className="mini" onClick={() => setInspectionEditing('new')}>{t('✏️ nuevo')}</button>
+              </label>
+              <ul className="list">
+                {(current.inspections ?? []).map((ins) => (
+                  <li key={ins.id}>
+                    <span className="mrow" style={{ cursor: 'pointer' }} onClick={() => setInspectionEditing(ins)}>
+                      📋 {ins.name} · {ins.defects.length} {t('defectos')}
+                    </span>
+                    <button
+                      className="del"
+                      onClick={() => updateCurrent((p) => {
+                        p.inspections = (p.inspections ?? []).filter((x) => x.id !== ins.id)
+                        return p
+                      })}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+                {(current.inspections ?? []).length === 0 && (
+                  <li className="muted">{t('Informe de defectos con fotos anotadas (tejados, fachadas).')}</li>
+                )}
+              </ul>
+
+              <label className="block-label">
                 {t('Puntos de control GCP')} ({current.gcps.length})
                 <span>
                   <button className="mini" onClick={addGCP}>{t('+ añadir')}</button>{' '}
@@ -1354,6 +1385,22 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
               })
             }}
             onClose={() => setFacadeEditing(null)}
+          />
+        )}
+        {inspectionEditing && (
+          <InspectionEditor
+            projectName={current.name}
+            inspection={inspectionEditing === 'new' ? null : inspectionEditing}
+            onStatus={setStatus}
+            onSave={(ins) => {
+              if (!ins.defects.length) return // nada que guardar
+              updateCurrent((p) => {
+                const rest = (p.inspections ?? []).filter((x) => x.id !== ins.id)
+                p.inspections = [...rest, ins]
+                return p
+              })
+            }}
+            onClose={() => setInspectionEditing(null)}
           />
         )}
         {showTour && <GuidedTour onClose={() => setShowTour(false)} />}
