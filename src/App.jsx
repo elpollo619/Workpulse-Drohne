@@ -16,7 +16,7 @@ import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } fro
 import { computeVolume, computeVolumeDiff } from './lib/raster.js'
 import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './lib/mission.js'
 import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
-import { t, useLang, setLang } from './lib/i18n.js'
+import { t, useLang, setLang, getLang } from './lib/i18n.js'
 import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
 import { fetchFlightConditions } from './lib/weather.js'
 import { fetchNearestLive } from './lib/meteoswiss.js'
@@ -26,6 +26,7 @@ import {
   fetchTerrainIntel, fetchBuildingInfo, fetchParcelAt, searchSwissLocations, wgs84ToLV95, isInSwitzerland,
 } from './lib/swiss.js'
 import { openSitePlanPDF } from './lib/siteplan.js'
+import { fetchOerebExtract } from './lib/oereb.js'
 import { parsePhotoMeta } from './lib/exif.js'
 import { MINI4PRO } from './lib/mission.js'
 
@@ -271,12 +272,13 @@ export default function App() {
   async function handleIntel([lng, lat]) {
     setStatus('🧠 Cruzando todas las fuentes oficiales…')
     try {
-      const [terrain, wx, live] = await Promise.all([
+      const [terrain, wx, live, oereb] = await Promise.all([
         fetchTerrainIntel(lng, lat),
         fetchFlightConditions(lat, lng).catch(() => null),
         fetchNearestLive(lng, lat).catch(() => null),
+        fetchOerebExtract(lng, lat).catch(() => null),
       ])
-      setIntel({ ...terrain, weather: wx, live })
+      setIntel({ ...terrain, weather: wx, live, oereb })
       setStatus(null)
     } catch (err) {
       setStatus(`No se pudo completar la radiografía: ${err.message}`)
@@ -309,6 +311,12 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
 <h2>Ordenación del territorio (ARE)</h2><p>${intel.bauzone
       ? `Zona de construcción: <b>${esc(intel.bauzone.tipo)}</b> · ${esc(intel.bauzone.municipio)} (${esc(intel.bauzone.canton)})`
       : 'Fuera de zona de construcción registrada.'}</p>
+<h2>Restricciones legales de la parcela (ÖREB)</h2>${intel.oereb?.available && intel.oereb.restrictions.length
+      ? `<p>Parcela n.º ${esc(intel.oereb.parcel)} · EGRID ${esc(intel.oereb.egrid)}</p>` +
+        intel.oereb.restrictions.map((r) => `<p>⚖️ <b>${esc(r.themeLabel.es)}</b>${r.text ? ' — ' + esc(r.text) : ''}</p>`).join('')
+      : intel.oereb
+        ? `<p>Extracto no disponible aquí (cantón ${esc(intel.oereb.canton) || '—'}). Consulta el catastro ÖREB cantonal.</p>`
+        : '<p>Sin datos ÖREB en este punto.</p>'}
 <h2>Solar (BFE)</h2><p>${intel.solar
       ? `Techo: aptitud <b>${esc(intel.solar.klasseText)}</b> · ${intel.solar.areaM2?.toFixed(0)} m² · ${Math.round(intel.solar.yearlyKWh ?? 0).toLocaleString('es-CH')} kWh/año estimados`
       : 'Sin techo en el catastro solar en este punto.'}</p>
@@ -1340,6 +1348,16 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                 ? `${intel.bauzone.tipo ?? 'Zona de construcción'} · ${intel.bauzone.municipio ?? ''} (${intel.bauzone.canton ?? ''})`
                 : t('Fuera de zona de construcción registrada')}
             </div>
+            {intel.oereb?.available && intel.oereb.restrictions.length > 0 && (
+              <div className="intel-row">
+                ⚖️ {t('Restricciones legales (ÖREB)')}:
+                {intel.oereb.restrictions.slice(0, 4).map((r, i) => (
+                  <div key={i} className="intel-sub">
+                    · {getLang() === 'de' ? r.themeLabel.de : r.themeLabel.es}{r.text ? ` — ${r.text}` : ''}
+                  </div>
+                ))}
+              </div>
+            )}
             {intel.solar && (
               <div className="intel-row">
                 ☀️ Techo: {intel.solar.klasseText} · {intel.solar.areaM2?.toFixed(0)} m² ·{' '}
