@@ -483,8 +483,9 @@ export const CHAPTERS = [
       'Carga el DSM actual y el del vuelo anterior (o 🏔️ terreno oficial como base).',
       '🔥 Mapa de calor de cambios muestra dónde hubo movimiento (> 10 cm).',
       'Para el número exacto: herramienta ⛰️ Volumen con base "⏮️ Vuelo anterior" y dibuja la zona — obtienes Δ total, añadido y retirado por separado.',
+      'Contra un PROYECTO: base "🎯 Cota de diseño" — indica la rasante objetivo (y pendiente si la hay) y obtienes el desmonte (excavar) y el terraplén (rellenar) para llegar a esa cota, con mapa de calor rojo/azul.',
     ],
-    tip: 'Es la herramienta de facturación: "este mes entraron 1 240 m³ de grava" con evidencia visual y números.',
+    tip: 'Es la herramienta de facturación: "este mes entraron 1 240 m³ de grava" con evidencia visual y números. Y con la cota de diseño calculas el movimiento de tierras de una explanación.',
     action: { tab: 'process' },
   },
   {

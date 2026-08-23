@@ -210,6 +210,142 @@ export function buildDiffGrid(dsmNow, dsmPrev, maxDim = 400, threshold = 0.1) {
 }
 
 /**
+ * Cut/fill contra una superficie de diseño dentro de un polígono: cuánto
+ * material hay que EXCAVAR (el terreno está por encima del diseño) y cuánto
+ * RELLENAR (por debajo), para llevar el terreno a la rasante proyectada.
+ *
+ * La superficie de diseño puede ser una cota fija (designZ) o un plano
+ * inclinado: designZ en un punto de referencia (refLng, refLat) + pendiente
+ * (slopePct) en la dirección slopeDir (grados desde el norte, sentido horario).
+ *
+ * @param {object} georaster       DSM ya parseado
+ * @param {Array<[lng,lat]>} ring  contorno en WGS84
+ * @param {object} design
+ * @param {number} design.z                 cota de diseño (m) en el punto de referencia
+ * @param {[number,number]} [design.ref]    [lng,lat] de referencia (def. centroide)
+ * @param {number} [design.slopePct=0]      pendiente en % (0 = plano horizontal)
+ * @param {number} [design.slopeDir=0]      dirección de bajada (° desde el norte)
+ * @returns {{cutM3:number, fillM3:number, netM3:number, cutAreaM2:number,
+ *            fillAreaM2:number, cellCount:number}}
+ */
+export function computeCutFill(georaster, ring, design) {
+  const band = georaster.values[0]
+  const noData = georaster.noDataValue
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = georaster
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+  const fromLngLat = def ? (lng, lat) => proj4('EPSG:4326', def, [lng, lat]) : (lng, lat) => [lng, lat]
+  const poly = turfPolygon([[...ring, ring[0]]])
+  const rb = ringBBoxInCRS(ring, fromLngLat)
+
+  // Referencia del plano de diseño (por defecto, centroide del anillo).
+  const ref = design.ref ?? [
+    ring.reduce((s, p) => s + p[0], 0) / ring.length,
+    ring.reduce((s, p) => s + p[1], 0) / ring.length,
+  ]
+  const [refX, refY] = fromLngLat(ref[0], ref[1])
+  const slope = (design.slopePct ?? 0) / 100
+  const dir = ((design.slopeDir ?? 0) * Math.PI) / 180
+  // Vector de bajada en el plano (x=este, y=norte).
+  const dx = Math.sin(dir)
+  const dy = Math.cos(dir)
+
+  const designZAt = (x, y) => {
+    if (!slope) return design.z
+    // Distancia proyectada sobre la dirección de bajada → resta de cota.
+    const along = (x - refX) * dx + (y - refY) * dy
+    return design.z - slope * along
+  }
+
+  let cut = 0
+  let fill = 0
+  let cutArea = 0
+  let fillArea = 0
+  let cells = 0
+  for (let r = 0; r < height; r++) {
+    const y = ymax - (r + 0.5) * pixelHeight
+    if (y < rb.ymin || y > rb.ymax) continue
+    const row = band[r]
+    for (let c = 0; c < width; c++) {
+      const z = row[c]
+      if (z == null || z === noData || Number.isNaN(z)) continue
+      const x = xmin + (c + 0.5) * pixelWidth
+      if (x < rb.xmin || x > rb.xmax) continue
+      const [lng, lat] = toLngLat(x, y)
+      if (!booleanPointInPolygon(turfPoint([lng, lat]), poly)) continue
+      const cellArea = isGeographic
+        ? pixelWidth * metersPerDegLon(lat) * pixelHeight * METERS_PER_DEG_LAT
+        : pixelWidth * pixelHeight
+      const dz = z - designZAt(x, y)
+      if (dz >= 0) { cut += dz * cellArea; cutArea += cellArea }
+      else { fill += -dz * cellArea; fillArea += cellArea }
+      cells++
+    }
+  }
+  return { cutM3: cut, fillM3: fill, netM3: cut - fill, cutAreaM2: cutArea, fillAreaM2: fillArea, cellCount: cells }
+}
+
+/**
+ * Mapa de calor de desviación contra una superficie de diseño: rojo = el
+ * terreno está por encima (excavar), azul = por debajo (rellenar).
+ * Misma estructura de salida que buildDiffGrid.
+ */
+export function buildDesignGrid(georaster, design, maxDim = 400, threshold = 0.1) {
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = georaster
+  const band = georaster.values[0]
+  const noData = georaster.noDataValue
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+  const fromLngLat = def ? (lng, lat) => proj4('EPSG:4326', def, [lng, lat]) : (lng, lat) => [lng, lat]
+
+  const ref = design.ref ?? [xmin, ymax]
+  const [refX, refY] = design.ref ? fromLngLat(ref[0], ref[1]) : [xmin, ymax]
+  const slope = (design.slopePct ?? 0) / 100
+  const dir = ((design.slopeDir ?? 0) * Math.PI) / 180
+  const ddx = Math.sin(dir), ddy = Math.cos(dir)
+  const designZAt = (x, y) => (slope ? design.z - slope * ((x - refX) * ddx + (y - refY) * ddy) : design.z)
+
+  const step = Math.max(1, Math.ceil(Math.max(width, height) / maxDim))
+  const gw = Math.floor(width / step)
+  const gh = Math.floor(height / step)
+  const diffs = new Float32Array(gw * gh).fill(NaN)
+  let maxAbs = 0, minDz = Infinity, maxDz = -Infinity
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      const r = j * step, c = i * step
+      const z = band[r][c]
+      if (z == null || z === noData || Number.isNaN(z)) continue
+      const x = xmin + (c + 0.5) * pixelWidth
+      const y = ymax - (r + 0.5) * pixelHeight
+      const dz = z - designZAt(x, y)
+      diffs[j * gw + i] = dz
+      if (Math.abs(dz) > maxAbs) maxAbs = Math.abs(dz)
+      if (dz < minDz) minDz = dz
+      if (dz > maxDz) maxDz = dz
+    }
+  }
+  const rgba = new Uint8ClampedArray(gw * gh * 4)
+  for (let k = 0; k < diffs.length; k++) {
+    const dz = diffs[k]
+    if (Number.isNaN(dz) || Math.abs(dz) < threshold) continue
+    const tt = Math.min(1, Math.abs(dz) / (maxAbs || 1))
+    const o = k * 4
+    if (dz > 0) { rgba[o] = 239; rgba[o + 1] = 68; rgba[o + 2] = 68 } // excavar
+    else { rgba[o] = 59; rgba[o + 1] = 130; rgba[o + 2] = 246 } // rellenar
+    rgba[o + 3] = Math.round(60 + 180 * tt)
+  }
+  const corners = [
+    toLngLat(xmin, ymax), toLngLat(xmin + width * pixelWidth, ymax),
+    toLngLat(xmin, ymax - height * pixelHeight), toLngLat(xmin + width * pixelWidth, ymax - height * pixelHeight),
+  ]
+  const lngs = corners.map((cc) => cc[0]), lats = corners.map((cc) => cc[1])
+  const bounds = [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]]
+  return { rgba, gw, gh, bounds, minDz, maxDz, maxAbs }
+}
+
+/**
  * Interpolación IDW (inverso de la distancia al cuadrado) desde muestras
  * {x, y, z} hacia un punto (x, y). Coordenadas en el CRS del raster.
  */

@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
-import { loadGeoRaster, buildDiffGrid } from '../lib/raster.js'
+import { loadGeoRaster, buildDiffGrid, buildDesignGrid } from '../lib/raster.js'
 import { fmtDistance, fmtArea, fmtVolume } from '../lib/measure.js'
 import { SWISS_LAYERS, SWISS_OVERLAYS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
@@ -246,6 +246,20 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
         interactive: false,
       }).addTo(map)
       map.fitBounds(g.bounds)
+      return { minDz: g.minDz, maxDz: g.maxDz }
+    },
+    /** Mapa de calor de desviación contra una rasante de diseño
+     *  (rojo=excavar, azul=rellenar). Reemplaza cualquier heatmap previo. */
+    showDesignHeatmap(dsm, design) {
+      const map = mapRef.current
+      if (heatmapRef.current) { map.removeLayer(heatmapRef.current); heatmapRef.current = null }
+      if (!dsm) return undefined
+      const g = buildDesignGrid(dsm, design)
+      const canvas = document.createElement('canvas')
+      canvas.width = g.gw
+      canvas.height = g.gh
+      canvas.getContext('2d').putImageData(new ImageData(g.rgba, g.gw, g.gh), 0, 0)
+      heatmapRef.current = L.imageOverlay(canvas.toDataURL(), g.bounds, { opacity: 0.85, interactive: false }).addTo(map)
       return { minDz: g.minDz, maxDz: g.maxDz }
     },
     /** Redibuja todas las mediciones y puntos del proyecto. */

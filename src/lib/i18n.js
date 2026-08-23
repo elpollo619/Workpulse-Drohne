@@ -85,6 +85,16 @@ export const DE = {
   'Perímetro (interpolado)': 'Umriss (interpoliert)',
   '🇨🇭 Terreno oficial swissALTI3D': '🇨🇭 Offizielles Gelände swissALTI3D',
   '⏮️ Vuelo anterior (diferencia)': '⏮️ Vorheriger Flug (Differenz)',
+  '🎯 Cota de diseño (desmonte/terraplén)': '🎯 Sollkote (Abtrag/Auftrag)',
+  'Cota de diseño (rasante objetivo, m s.n.m.):': 'Sollkote (Zielhöhe, m ü. M.):',
+  '⚠️ Cota de diseño no válida.': '⚠️ Ungültige Sollkote.',
+  'Pendiente (%, 0 = plano horizontal):': 'Gefälle (%, 0 = horizontale Ebene):',
+  'Dirección de bajada (° desde el norte):': 'Gefällerichtung (° ab Norden):',
+  'Calculando desmonte/terraplén…': 'Berechne Abtrag/Auftrag…',
+  'Desmonte': 'Abtrag',
+  'Terraplén': 'Auftrag',
+  'neto': 'netto',
+  'mapa de calor: rojo excavar, azul rellenar': 'Heatmap: rot abtragen, blau auffüllen',
 
   // Suiza 3D
   '🏙️ Suiza 3D — casas y terreno oficiales': '🏙️ Schweiz 3D — offizielle Gebäude und Gelände',

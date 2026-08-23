@@ -13,7 +13,7 @@ import { loadProjects, saveProjects, newProject } from './lib/storage.js'
 import { exportGeoJSON, exportPointsCSV, exportGCP, exportGPX, exportKML } from './lib/export.js'
 import { openPrintableReport } from './lib/report.js'
 import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } from './lib/measure.js'
-import { computeVolume, computeVolumeDiff } from './lib/raster.js'
+import { computeVolume, computeVolumeDiff, computeCutFill } from './lib/raster.js'
 import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './lib/mission.js'
 import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
 import { t, useLang, setLang, getLang } from './lib/i18n.js'
@@ -48,6 +48,7 @@ const BASE_MODES = [
   { id: 'perimeter', label: 'Perímetro (interpolado)' },
   { id: 'swiss', label: '🇨🇭 Terreno oficial swissALTI3D' },
   { id: 'prev', label: '⏮️ Vuelo anterior (diferencia)' },
+  { id: 'design', label: '🎯 Cota de diseño (desmonte/terraplén)' },
 ]
 
 export default function App() {
@@ -560,6 +561,29 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
         setStatus(null)
       }
       addMeasurement('volume', ring, result)
+      return
+    }
+
+    // Cut/fill contra una rasante de diseño: desmonte (excavar) / terraplén (rellenar).
+    if (baseMode === 'design') {
+      const zStr = prompt(t('Cota de diseño (rasante objetivo, m s.n.m.):'), '')
+      const z = parseFloat(zStr)
+      if (isNaN(z)) { setStatus(t('⚠️ Cota de diseño no válida.')); return }
+      const slopeStr = prompt(t('Pendiente (%, 0 = plano horizontal):'), '0')
+      const slopePct = parseFloat(slopeStr) || 0
+      let slopeDir = 0
+      if (slopePct) slopeDir = parseFloat(prompt(t('Dirección de bajada (° desde el norte):'), '0')) || 0
+      setStatus(t('Calculando desmonte/terraplén…'))
+      const cf = computeCutFill(dsm, ring, { z, slopePct, slopeDir })
+      const result = {
+        baseModeUsed: 'design', designZ: z, slopePct, slopeDir,
+        cutM3: cf.cutM3, fillM3: cf.fillM3, volumeM3: cf.netM3,
+        cutAreaM2: cf.cutAreaM2, fillAreaM2: cf.fillAreaM2, cellCount: cf.cellCount,
+      }
+      addMeasurement('volume', ring, result)
+      // Mapa de calor de desviación (rojo=excavar, azul=rellenar).
+      const stats = mapRef.current?.showDesignHeatmap(dsm, { z, slopePct, slopeDir })
+      setStatus(`🎯 ${t('Desmonte')} ${fmtVolume(cf.cutM3)} · ${t('Terraplén')} ${fmtVolume(cf.fillM3)} · ${t('neto')} ${fmtVolume(cf.netM3)}${stats ? ` · ${t('mapa de calor: rojo excavar, azul rellenar')}` : ''}.`)
       return
     }
 
@@ -1149,9 +1173,11 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
                         {m.type === 'area' && `⬛ ${fmtArea(m.result.areaM2)}`}
                         {m.type === 'volume' && (m.result.baseModeUsed === 'diff'
                           ? `⏮️ Δ ${fmtVolume(m.result.volumeM3)} (＋${fmtVolume(m.result.fillM3)} −${fmtVolume(m.result.cutM3)})`
-                          : `⛰️ ${fmtVolume(m.result.fillM3)}${
-                              m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
-                            }`)}
+                          : m.result.baseModeUsed === 'design'
+                            ? `🎯 ${t('Desmonte')} ${fmtVolume(m.result.cutM3)} / ${t('Terraplén')} ${fmtVolume(m.result.fillM3)}`
+                            : `⛰️ ${fmtVolume(m.result.fillM3)}${
+                                m.result.baseModeUsed === 'swissALTI3D' ? ' 🇨🇭' : ''
+                              }`)}
                       </span>
                       {m.type === 'distance' && m.result.profile && (
                         <ProfileChart profile={m.result.profile} />
