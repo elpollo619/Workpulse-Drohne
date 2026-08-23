@@ -16,6 +16,7 @@ import { fmtDistance, fmtArea, fmtVolume, lineLengthMeters, polygonMetrics } fro
 import { computeVolume, computeVolumeDiff, computeCutFill } from './lib/raster.js'
 import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './lib/mission.js'
 import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
+import { parseFlightLog, fmtDuration, exportLogbookCSV } from './lib/logbook.js'
 import { t, useLang, setLang, getLang } from './lib/i18n.js'
 import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
 import { fetchFlightConditions, sunPosition } from './lib/weather.js'
@@ -175,6 +176,35 @@ export default function App() {
   function clearShadow() {
     setShadowHour(null)
     mapRef.current?.showShadow(null, null)
+  }
+
+  // 📒 Importa un CSV de vuelo, dibuja la traza y registra el vuelo.
+  async function onFlightLog(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      const parsed = parseFlightLog(await f.text())
+      if (!parsed) {
+        setStatus(t('⚠️ No se reconoció el CSV. Necesita columnas de latitud, longitud (y tiempo/altura).'))
+        e.target.value = ''
+        return
+      }
+      mapRef.current?.showFlightTrack(parsed.points)
+      const s = parsed.stats
+      updateCurrent((p) => {
+        p.flights = [...(p.flights ?? []), {
+          id: crypto.randomUUID(),
+          name: f.name.replace(/\.csv$/i, ''),
+          date: new Date().toISOString().slice(0, 10),
+          durationS: s.durationS, maxAltM: s.maxAltM, distanceM: s.distanceM, maxHomeDistM: s.maxHomeDistM,
+        }]
+        return p
+      })
+      setStatus(`📒 ${t('Vuelo registrado')}: ${fmtDuration(s.durationS)} min · ${t('máx')} ${s.maxAltM?.toFixed(0) ?? '?'} m · ${(s.distanceM / 1000).toFixed(2)} km · ${t('máx despegue')} ${s.maxHomeDistM.toFixed(0)} m`)
+    } catch (err) {
+      setStatus(`⚠️ ${err.message}`)
+    }
+    e.target.value = ''
   }
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -935,6 +965,36 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             </button>
             <p className="hint">
               {t('Proyecta las sombras del DSM a la hora elegida (hoy) — ve qué techos y zonas reciben sol. Requiere un DSM cargado.')}
+            </p>
+
+            <label className="block-label">{t('📒 Libro de vuelos')} ({(current.flights ?? []).length})</label>
+            <label className="filebtn">
+              {t('📒 Importar registro de vuelo (CSV)')}
+              <input type="file" accept=".csv,text/csv" hidden onChange={onFlightLog} />
+            </label>
+            {(current.flights ?? []).length > 0 && (
+              <>
+                <ul className="list">
+                  {(current.flights ?? []).map((fl) => (
+                    <li key={fl.id}>
+                      <span className="mrow">
+                        📒 {fl.date} · {fmtDuration(fl.durationS)} · {(fl.distanceM / 1000).toFixed(2)} km
+                        {fl.maxAltM != null ? ` · ${fl.maxAltM.toFixed(0)} m` : ''}
+                      </span>
+                      <button className="del" onClick={() => updateCurrent((p) => {
+                        p.flights = (p.flights ?? []).filter((x) => x.id !== fl.id)
+                        return p
+                      })}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+                <button onClick={() => exportLogbookCSV(current.flights, current.name)}>
+                  {t('💾 Exportar libro de vuelos (CSV)')}
+                </button>
+              </>
+            )}
+            <p className="hint">
+              {t('Importa el CSV de Airdata/Litchi/registro de vuelo — se dibuja la traza y se registra duración, altura y distancia. Útil como libro de vuelos del operador.')}
             </p>
 
             <label className="block-label">{t('🇨🇭 Terreno oficial — sin volar')}</label>

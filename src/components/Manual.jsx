@@ -298,6 +298,22 @@ const ILLOS = {
       <text x="160" y="152" fill={C.muted} fontSize="10" textAnchor="middle">+ informe imprimible y copia de seguridad del proyecto</text>
     </Frame>
   ),
+  logbook: (
+    <Frame>
+      {/* traza de vuelo */}
+      <path d="M50 120 C90 60 140 130 180 80 S250 60 280 100" fill="none" stroke={C.blue} strokeWidth="2.5" />
+      <circle cx="50" cy="120" r="5" fill={C.green} />
+      <text x="40" y="138" fill={C.green} fontSize="9">🛫</text>
+      <circle cx="280" cy="100" r="5" fill={C.red} />
+      <text x="272" y="118" fill={C.red} fontSize="9">🛬</text>
+      {/* ficha */}
+      <rect x="196" y="30" width="104" height="52" rx="6" fill={C.panel} stroke={C.line} />
+      <text x="204" y="46" fill={C.text} fontSize="9">⏱️ 14:32 min</text>
+      <text x="204" y="60" fill={C.muted} fontSize="8.5">⬆️ máx 98 m</text>
+      <text x="204" y="73" fill={C.muted} fontSize="8.5">📏 2.4 km · ⤢ 340 m</text>
+      <text x="30" y="160" fill={C.muted} fontSize="9.5">CSV del vuelo → traza + duración, altura y distancia</text>
+    </Frame>
+  ),
   app360: (
     <Frame>
       <circle cx="100" cy="88" r="46" fill="none" stroke={C.blue} strokeWidth="2.5" />
@@ -524,6 +540,17 @@ export const CHAPTERS = [
     ],
     tip: 'El DXF usa un origen local (nota incluida en el archivo) para que ArchiCAD no proteste por coordenadas lejanas; súmale las constantes E/N para volver a LV95 absoluto.',
     action: null,
+  },
+  {
+    id: 'logbook', icon: '📒', title: 'Libro de vuelos',
+    what: 'Lleva el registro de tus vuelos (obligación práctica del operador registrado BAZL/EASA), todo local. Importa el CSV del vuelo (exportación de Airdata, Litchi o cualquier registro con lat/lng/tiempo/altura) y la app dibuja la traza y calcula duración, altura máxima, distancia recorrida y distancia máxima al despegue.',
+    steps: [
+      'En ⚙️ Procesar → 📒 Importar registro de vuelo (CSV), elige el archivo del vuelo.',
+      'La traza se dibuja en el mapa (🛫 despegue, 🛬 aterrizaje) y el vuelo queda registrado con sus estadísticas.',
+      '💾 Exporta el libro de vuelos completo como CSV para tus registros o para la autoridad.',
+    ],
+    tip: 'Airdata (airdata.com) importa los logs del DJI Fly y los exporta como CSV — el formato más cómodo. La app detecta las columnas automáticamente.',
+    action: { tab: 'process' },
   },
   {
     id: 'app360', icon: '📷', title: 'Workpulse 360 (interiores)',

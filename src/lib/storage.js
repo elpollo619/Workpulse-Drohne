@@ -27,5 +27,6 @@ export function newProject(name) {
     gcpMarks: [],     // { id, gcpId, image, x, y }  marca píxel<->terreno en una foto
     facades: [],      // { id, name, elements, metersPerPx, imgW, imgH }  planos de fachada
     inspections: [],  // { id, name, defects:[{category,severity,note,lat,lng,image}] }
+    flights: [],      // { id, name, date, durationS, maxAltM, distanceM, maxHomeDistM }
   }
 }

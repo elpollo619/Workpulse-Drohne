@@ -37,6 +37,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const dsmPrevRef = useRef(null) // DSM del vuelo anterior (comparación)
   const heatmapRef = useRef(null) // overlay del mapa de calor de cambios
   const shadowRef = useRef(null) // overlay del mapa de sombras
+  const trackLayerRef = useRef(null) // traza del vuelo (libro de vuelos)
   const solarLayerRef = useRef(null) // techo del informe solar
   const coverageLayerRef = useRef(null) // fotos del vuelo (cobertura)
   const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
@@ -455,6 +456,24 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
     },
     setOrthoOpacity(v) {
       if (orthoRef.current) orthoRef.current.setOpacity(v)
+    },
+    /** Dibuja la traza de un vuelo (libro de vuelos): línea + despegue. */
+    showFlightTrack(points) {
+      const map = mapRef.current
+      if (trackLayerRef.current) map.removeLayer(trackLayerRef.current)
+      const group = L.featureGroup()
+      const latlngs = points.map((p) => [p.lat, p.lng])
+      L.polyline(latlngs, { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(group)
+      L.circleMarker(latlngs[0], { radius: 5, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 })
+        .bindTooltip('🛫', { direction: 'top' }).addTo(group)
+      L.circleMarker(latlngs[latlngs.length - 1], { radius: 5, color: '#f87171', fillColor: '#f87171', fillOpacity: 1 })
+        .bindTooltip('🛬', { direction: 'top' }).addTo(group)
+      group.addTo(map)
+      trackLayerRef.current = group
+      map.fitBounds(group.getBounds().pad(0.15))
+    },
+    clearFlightTrack() {
+      if (trackLayerRef.current) { mapRef.current?.removeLayer(trackLayerRef.current); trackLayerRef.current = null }
     },
   }))
 
