@@ -20,6 +20,33 @@ export function sunElevation(lat, lng, date = new Date()) {
   return elev
 }
 
+/**
+ * Posición solar completa (elevación + azimut) para una posición y fecha.
+ * Azimut en grados desde el norte, sentido horario (0=N, 90=E, 180=S, 270=O).
+ * @returns {{elevation:number, azimuth:number}}
+ */
+export function sunPosition(lat, lng, date = new Date()) {
+  const rad = Math.PI / 180
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0)
+  const dayOfYear = Math.floor((date.getTime() - start) / 86400000)
+  const decl = 23.45 * Math.sin(rad * (360 / 365) * (284 + dayOfYear))
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60
+  const solarTime = utcHours + lng / 15
+  const hourAngle = (solarTime - 12) * 15
+
+  const sinElev =
+    Math.sin(rad * lat) * Math.sin(rad * decl) +
+    Math.cos(rad * lat) * Math.cos(rad * decl) * Math.cos(rad * hourAngle)
+  const elevation = Math.asin(sinElev) / rad
+  // Azimut (convención norte, horario).
+  const cosAz =
+    (Math.sin(rad * decl) - Math.sin(rad * lat) * sinElev) /
+    (Math.cos(rad * lat) * Math.cos(Math.asin(sinElev)))
+  let az = Math.acos(Math.max(-1, Math.min(1, cosAz))) / rad
+  if (hourAngle > 0) az = 360 - az // tarde → oeste
+  return { elevation, azimuth: az }
+}
+
 // Umbrales para un drone <250 g.
 const WIND_WARN = 5    // m/s
 const WIND_MAX = 8     // m/s (el límite técnico del Mini 4 Pro es ~10.7)

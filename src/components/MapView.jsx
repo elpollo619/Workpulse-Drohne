@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import GeoRasterLayer from 'georaster-layer-for-leaflet'
-import { loadGeoRaster, buildDiffGrid, buildDesignGrid } from '../lib/raster.js'
+import { loadGeoRaster, buildDiffGrid, buildDesignGrid, computeShadowGrid } from '../lib/raster.js'
 import { fmtDistance, fmtArea, fmtVolume } from '../lib/measure.js'
 import { SWISS_LAYERS, SWISS_OVERLAYS, BERN_CENTER, wgs84ToLV95, isInSwitzerland } from '../lib/swiss.js'
 
@@ -36,6 +36,7 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
   const dsmRef = useRef(null) // georaster crudo del DSM
   const dsmPrevRef = useRef(null) // DSM del vuelo anterior (comparación)
   const heatmapRef = useRef(null) // overlay del mapa de calor de cambios
+  const shadowRef = useRef(null) // overlay del mapa de sombras
   const solarLayerRef = useRef(null) // techo del informe solar
   const coverageLayerRef = useRef(null) // fotos del vuelo (cobertura)
   const projectLayerRef = useRef(null) // FeatureGroup con la geometría del proyecto
@@ -261,6 +262,20 @@ const MapView = forwardRef(function MapView({ tool, onDraw, onStatus }, ref) {
       canvas.getContext('2d').putImageData(new ImageData(g.rgba, g.gw, g.gh), 0, 0)
       heatmapRef.current = L.imageOverlay(canvas.toDataURL(), g.bounds, { opacity: 0.85, interactive: false }).addTo(map)
       return { minDz: g.minDz, maxDz: g.maxDz }
+    },
+    /** Superpone (o quita, con sunElev=null) el mapa de sombras del DSM para
+     *  una posición solar. Reutiliza el mismo overlay que los heatmaps. */
+    showShadow(dsm, sunElev, sunAz) {
+      const map = mapRef.current
+      if (shadowRef.current) { map.removeLayer(shadowRef.current); shadowRef.current = null }
+      if (!dsm || sunElev == null) return undefined
+      const g = computeShadowGrid(dsm, sunElev, sunAz)
+      const canvas = document.createElement('canvas')
+      canvas.width = g.gw
+      canvas.height = g.gh
+      canvas.getContext('2d').putImageData(new ImageData(g.rgba, g.gw, g.gh), 0, 0)
+      shadowRef.current = L.imageOverlay(canvas.toDataURL(), g.bounds, { opacity: 0.9, interactive: false }).addTo(map)
+      return { shadowFrac: g.shadowFrac, sunUp: g.sunUp }
     },
     /** Redibuja todas las mediciones y puntos del proyecto. */
     syncProject(project) {

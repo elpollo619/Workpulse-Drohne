@@ -346,6 +346,110 @@ export function buildDesignGrid(georaster, design, maxDim = 400, threshold = 0.1
 }
 
 /**
+ * ☀️ Mapa de sombras sobre el DSM para una posición solar dada: por cada
+ * celda, marcha un rayo hacia el sol y comprueba si otra celda lo bloquea
+ * (relieve, edificios, árboles del propio vuelo). Devuelve un overlay RGBA
+ * (oscuro = en sombra) y la fracción en sombra.
+ *
+ * @param {object} georaster       DSM parseado
+ * @param {number} sunElevDeg      elevación solar (grados sobre el horizonte)
+ * @param {number} sunAzimuthDeg   azimut solar (° desde el norte, horario)
+ * @param {number} maxDim          lado máximo de la rejilla (submuestreo)
+ * @returns {{rgba:Uint8ClampedArray, gw:number, gh:number, bounds:Array,
+ *            shadowFrac:number, sunUp:boolean}}
+ */
+export function computeShadowGrid(georaster, sunElevDeg, sunAzimuthDeg, maxDim = 400) {
+  const { xmin, ymax, pixelWidth, pixelHeight, projection, width, height } = georaster
+  const band = georaster.values[0]
+  const noData = georaster.noDataValue
+  const isGeographic = projection === 4326 || projection === '4326'
+  const def = isGeographic ? null : proj4defForEPSG(Number(projection))
+  const toLngLat = def ? (x, y) => proj4(def, 'EPSG:4326', [x, y]) : (x, y) => [x, y]
+
+  const step = Math.max(1, Math.ceil(Math.max(width, height) / maxDim))
+  const gw = Math.floor(width / step)
+  const gh = Math.floor(height / step)
+
+  // Tamaño de celda de la rejilla submuestreada en metros.
+  const midLat = isGeographic ? (georaster.ymin + georaster.ymax) / 2 : 0
+  const cellX = isGeographic ? pixelWidth * metersPerDegLon(midLat) * step : pixelWidth * step
+  const cellY = isGeographic ? pixelHeight * METERS_PER_DEG_LAT * step : pixelHeight * step
+
+  // Alturas de la rejilla.
+  const Z = new Float32Array(gw * gh)
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      const v = band[j * step][i * step]
+      Z[j * gw + i] = v == null || v === noData || Number.isNaN(v) ? NaN : v
+    }
+  }
+
+  const rgba = new Uint8ClampedArray(gw * gh * 4)
+  const rad = Math.PI / 180
+  const sunUp = sunElevDeg > 0.5
+  let shadowCells = 0
+  let validCells = 0
+
+  if (sunUp) {
+    // Dirección HACIA el sol en la rejilla (x=este col+, y=norte fila-).
+    // azimut 0=N, 90=E: dx = sin(az) (este), dNorth = cos(az).
+    const dCol = Math.sin(sunAzimuthDeg * rad) // +este = +col
+    const dRow = -Math.cos(sunAzimuthDeg * rad) // +norte = -fila
+    const tanElev = Math.tan(Math.max(0.5, sunElevDeg) * rad)
+    // Metros por paso de 1 celda a lo largo del rayo (usa la métrica media).
+    const stepLen = Math.hypot(dCol * cellX, dRow * cellY) || 1
+    const maxSteps = Math.max(gw, gh)
+
+    for (let j = 0; j < gh; j++) {
+      for (let i = 0; i < gw; i++) {
+        const z0 = Z[j * gw + i]
+        if (Number.isNaN(z0)) continue
+        validCells++
+        let shadowed = false
+        let ci = i, cj = j, dist = 0
+        for (let s = 1; s <= maxSteps; s++) {
+          ci = i + dCol * s
+          cj = j + dRow * s
+          const ii = Math.round(ci), jj = Math.round(cj)
+          if (ii < 0 || jj < 0 || ii >= gw || jj >= gh) break
+          const zc = Z[jj * gw + ii]
+          if (Number.isNaN(zc)) continue
+          dist = s * stepLen
+          // Altura del rayo solar a esta distancia horizontal.
+          const rayZ = z0 + dist * tanElev
+          if (zc > rayZ + 0.05) { shadowed = true; break }
+        }
+        const o = (j * gw + i) * 4
+        if (shadowed) {
+          rgba[o] = 20; rgba[o + 1] = 30; rgba[o + 2] = 60; rgba[o + 3] = 130
+          shadowCells++
+        } else {
+          rgba[o + 3] = 0 // al sol → transparente
+        }
+      }
+    }
+  } else {
+    // Sol bajo el horizonte: todo en sombra (noche/crepúsculo).
+    for (let j = 0; j < gh; j++) {
+      for (let i = 0; i < gw; i++) {
+        if (Number.isNaN(Z[j * gw + i])) continue
+        validCells++; shadowCells++
+        const o = (j * gw + i) * 4
+        rgba[o] = 20; rgba[o + 1] = 30; rgba[o + 2] = 60; rgba[o + 3] = 150
+      }
+    }
+  }
+
+  const corners = [
+    toLngLat(xmin, ymax), toLngLat(xmin + width * pixelWidth, ymax),
+    toLngLat(xmin, ymax - height * pixelHeight), toLngLat(xmin + width * pixelWidth, ymax - height * pixelHeight),
+  ]
+  const lngs = corners.map((c) => c[0]), lats = corners.map((c) => c[1])
+  const bounds = [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]]
+  return { rgba, gw, gh, bounds, shadowFrac: validCells ? shadowCells / validCells : 0, sunUp }
+}
+
+/**
  * Interpolación IDW (inverso de la distancia al cuadrado) desde muestras
  * {x, y, z} hacia un punto (x, y). Coordenadas en el CRS del raster.
  */

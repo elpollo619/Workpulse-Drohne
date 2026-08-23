@@ -18,7 +18,7 @@ import { planGrid, planOrbit, applyTerrainFollow, downloadMissionKMZ } from './l
 import { blurScoreFromBitmap, analyzeTrack, flagBlurry } from './lib/quality.js'
 import { t, useLang, setLang, getLang } from './lib/i18n.js'
 import { downloadDXF3D, downloadXYZ } from './lib/dxf3d.js'
-import { fetchFlightConditions } from './lib/weather.js'
+import { fetchFlightConditions, sunPosition } from './lib/weather.js'
 import { fetchNearestLive } from './lib/meteoswiss.js'
 import { fetchSwissTerrainDSM } from './lib/terrain.js'
 import {
@@ -60,6 +60,7 @@ export default function App() {
   const [status, setStatus] = useState(null)
   const [tab, setTab] = useState('measure') // 'measure' | 'process'
   const [show3D, setShow3D] = useState(false)
+  const [shadowHour, setShadowHour] = useState(null) // hora del análisis de sombras
   const [swiss3D, setSwiss3D] = useState(null) // centro [lng,lat] del visor Suiza 3D
   const [showGcpEditor, setShowGcpEditor] = useState(false)
   const [facadeEditing, setFacadeEditing] = useState(null) // null | 'new' | facade obj
@@ -151,6 +152,29 @@ export default function App() {
     } catch (err) {
       setStatus(`⚠️ ${err.message}`)
     }
+  }
+
+  // ☀️ Proyecta las sombras del DSM a la hora local elegida (fecha de hoy).
+  function updateShadow(hour) {
+    const dsm = mapRef.current?.getDSM()
+    if (!dsm) { setStatus(t('⚠️ Carga primero un DSM para ver las sombras.')); return }
+    const c = mapRef.current?.getCenter()
+    if (!c) return
+    setShadowHour(hour)
+    // Hora local (aprox. UTC+1/+2 en Suiza) → Date en UTC restando el offset local.
+    const d = new Date()
+    d.setHours(hour, 0, 0, 0)
+    const { elevation, azimuth } = sunPosition(c.lat, c.lng, d)
+    const res = mapRef.current?.showShadow(dsm, elevation, azimuth)
+    if (res) {
+      setStatus(res.sunUp
+        ? `☀️ ${hour}:00 · ${t('sol a')} ${elevation.toFixed(0)}° · ${(res.shadowFrac * 100).toFixed(0)}% ${t('en sombra')}`
+        : `🌙 ${hour}:00 · ${t('el sol está bajo el horizonte')}`)
+    }
+  }
+  function clearShadow() {
+    setShadowHour(null)
+    mapRef.current?.showShadow(null, null)
   }
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -896,6 +920,22 @@ p{font-size:13px;margin:6px 0}.warn{color:#b45309}.no{color:#b91c1c}footer{margi
             >
               {t('🔥 Mapa de calor de cambios')}
             </button>
+
+            <label className="block-label">{t('☀️ Sol y sombras')}</label>
+            <div className="row small">
+              <span>{t('Hora')}: <b>{shadowHour != null ? `${shadowHour}:00` : '—'}</b></span>
+              <input
+                type="range" min="5" max="21" step="1"
+                value={shadowHour ?? 12}
+                onChange={(e) => updateShadow(+e.target.value)}
+              />
+            </div>
+            <button onClick={() => { if (shadowHour == null) updateShadow(12); else clearShadow() }}>
+              {shadowHour != null ? t('☀️ Quitar sombras') : t('☀️ Ver sombras del terreno')}
+            </button>
+            <p className="hint">
+              {t('Proyecta las sombras del DSM a la hora elegida (hoy) — ve qué techos y zonas reciben sol. Requiere un DSM cargado.')}
+            </p>
 
             <label className="block-label">{t('🇨🇭 Terreno oficial — sin volar')}</label>
             <button onClick={() => loadOfficialTerrain('dsm')}>
